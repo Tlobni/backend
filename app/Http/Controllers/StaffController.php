@@ -57,7 +57,6 @@ class StaffController extends Controller {
         }
     }
 
-
     public function update(Request $request, $id) {
         ResponseService::noPermissionThenRedirect('staff-edit');
         $validator = Validator::make($request->all(), [
@@ -91,44 +90,56 @@ class StaffController extends Controller {
         }
     }
 
-    public function show(Request $request) {
-        ResponseService::noPermissionThenRedirect('staff-list');
+    public function show(Request $request)
+    {
+        // ResponseService::noPermissionThenRedirect('staff-list');
         $offset = $request->offset ?? 0;
         $limit = $request->limit ?? 10;
         $sort = $request->sort ?? 'id';
         $order = $request->order ?? 'DESC';
-
+    
+        // Fetch users with roles
         $sql = User::withTrashed()->with('roles')->orderBy($sort, $order)->whereHas('roles', function ($q) {
             $q->where('custom_role', 1);
         });
-
+    
         if (!empty($request->search)) {
             $sql->search($request->search);
         }
+    
         $total = $sql->count();
         $sql->skip($offset)->take($limit);
         $result = $sql->get();
-        $bulkData = array();
+    
+        $bulkData = [];
         $bulkData['total'] = $total;
-        $rows = array();
-        foreach ($result as $key => $row) {
+        $rows = [];
+    
+        foreach ($result as $row) {
             $operate = '';
+    
             if (Auth::user()->can('staff-update')) {
                 $operate .= BootstrapTableService::editButton(route('staff.update', $row->id), true);
                 $operate .= BootstrapTableService::editButton(route('staff.change-password', $row->id), true, '#resetPasswordModel', null, $row->id, 'bi bi-key');
             }
-
+    
             if (Auth::user()->can('staff-delete')) {
                 $operate .= BootstrapTableService::deleteButton(route('staff.destroy', $row->id));
             }
-
+    
+            // Get all role names as a comma-separated string
+            $roleNames = $row->roles->pluck('name')->implode(', ');
+    
             $tempRow = $row->toArray();
             $tempRow['status'] = empty($row->deleted_at);
+            $tempRow['roles'] = $roleNames; // Add role names to the response
             $tempRow['operate'] = $operate;
+    
             $rows[] = $tempRow;
         }
-
+    
         $bulkData['rows'] = $rows;
+    
         return response()->json($bulkData);
     }
 

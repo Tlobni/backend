@@ -17,10 +17,12 @@ use Throwable;
 
 /*Create Method which are common across the system*/
 
-class Controller extends BaseController {
+class Controller extends BaseController
+{
     use AuthorizesRequests, DispatchesJobs, ValidatesRequests;
 
-    public function changeRowOrder(Request $request) {
+    public function changeRowOrder(Request $request)
+    {
         try {
             $request->validate([
                 'data'   => 'required|array',
@@ -44,7 +46,8 @@ class Controller extends BaseController {
         }
     }
 
-    public function changeStatus(Request $request) {
+    public function changeStatus(Request $request)
+    {
         try {
             $request->validate([
                 'id'     => 'required|numeric',
@@ -87,22 +90,22 @@ class Controller extends BaseController {
             ResponseService::logErrorResponse($th);
             ResponseService::errorResponse();
         }
-
     }
 
-    public function readLanguageFile() {
+    public function readLanguageFile()
+    {
         try {
             //    https://medium.com/@serhii.matrunchyk/using-laravel-localization-with-javascript-and-vuejs-23064d0c210e
             header('Content-Type: text/javascript');
-//        $labels = Cache::remember('lang.js', 3600, static function () {
-//            $lang = app()->getLocale();
+            //        $labels = Cache::remember('lang.js', 3600, static function () {
+            //            $lang = app()->getLocale();
             $lang = Session::get('language');
-//            $lang = app()->getLocale();
+            //            $lang = app()->getLocale();
             $test = $lang->code ?? "en";
             $files = resource_path('lang/' . $test . '.json');
-//            return File::get($files);
-//        });]
-            echo('window.languageLabels = ' . File::get($files));
+            //            return File::get($files);
+            //        });]
+            echo ('window.languageLabels = ' . File::get($files));
             http_response_code(200);
             exit();
         } catch (Throwable $th) {
@@ -110,11 +113,13 @@ class Controller extends BaseController {
         }
     }
 
-    public function contactUsUIndex() {
+    public function contactUsUIndex()
+    {
         return view('contact-us');
     }
 
-    public function contactUsShow(Request $request) {
+    public function contactUsShow(Request $request)
+    {
         $offset = $request->offset ?? 0;
         $limit = $request->limit ?? 10;
         $sort = $request->input('sort', 'id');
@@ -146,5 +151,4 @@ class Controller extends BaseController {
         $bulkData['rows'] = $rows;
         return response()->json($bulkData);
     }
-
 }

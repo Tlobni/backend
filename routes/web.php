@@ -27,6 +27,7 @@ use App\Http\Controllers\UserVerificationController;
 use App\Http\Controllers\WebhookController;
 use App\Models\UserVerification;
 use App\Services\CachingService;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -367,3 +368,9 @@ Route::get('auto-translate/{id}/{type}/{locale}', function ($id, $type, $locale)
                          ->with('error', 'Auto translation failed.');
     }
 })->name('auto-translate');
+
+Route::get('/test-log', function () {
+    Log::info('Testing Laravel Log');
+
+    return response()->json(['message' => 'Log test successful']);
+});

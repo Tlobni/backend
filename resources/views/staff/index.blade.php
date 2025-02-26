@@ -1,17 +1,17 @@
 @extends('layouts.main')
 
 @section('title')
-    {{__("Staff Management")}}
+    {{__("User Management")}}
 @endsection
 
 @section('content')
     <div class="page-header">
         <h3 class="page-title">
-            {{__('Staff Management')}}
+            {{__('User Management')}}
         </h3>
         @can('role-create')
             <div class="buttons">
-                <a class="btn btn-primary" href="{{ route('staff.create') }}"> {{ __('Create New Staff') }}</a>
+                <a class="btn btn-primary" href="{{ route('staff.create') }}"> {{ __('Create New User') }}</a>
             </div>
         @endcan
     </div>
@@ -37,6 +37,8 @@
                                 <th scope="col" data-field="id" data-sortable="true" data-align="center">{{__("ID")}}</th>
                                 <th scope="col" data-field="name" data-sortable="true" data-align="center">{{__("Name")}}</th>
                                 <th scope="col" data-field="email" data-sortable="true" data-align="center">{{__("Email")}}</th>
+                                <th scope="col" data-field="roles" data-sortable="true" data-align="center">{{__("Roles")}}</th> <!-- ✅ Add Roles Column -->
+
                                 @can('staff-update')
                                     <th scope="col" data-field="status" data-formatter="statusSwitchFormatter" data-sortable="false" data-align="center">{{__("Status")}}</th>
                                 @endcan

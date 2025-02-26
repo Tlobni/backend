@@ -13,7 +13,7 @@ return new class extends Migration {
     public function up() {
         Schema::create('users', static function (Blueprint $table) {
             $table->id();
-            $table->string('name');
+            $table->string('name')->nullable();
             $table->string('email');
             $table->string('mobile')->nullable();
             $table->timestamp('email_verified_at')->nullable();
@@ -24,6 +24,13 @@ return new class extends Migration {
             $table->boolean('notification')->default(0);
             $table->string('firebase_id')->nullable();
             $table->text('address')->nullable();
+
+            $table->string('business_name')->nullable(); // Only for Business Providers
+            $table->text('categories')->nullable(); // For Business and Experts
+            $table->string('phone')->nullable();
+            $table->string('gender')->nullable();
+            $table->string('location')->nullable();
+
             $table->rememberToken();
             $table->timestamps();
             $table->softDeletes();

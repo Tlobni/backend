@@ -240,7 +240,7 @@
                 @endcanany
 
                 @canany(['role-list','role-create','role-update','role-delete','staff-list','staff-create','staff-update','staff-delete'])
-                    <div class="sidebar-new-title">{{ __('Staff Management') }}</div>
+                    <div class="sidebar-new-title">{{ __('User Management') }}</div>
                     @canany(['role-list','role-create','role-update','role-delete'])
                         <li class="sidebar-item">
                             <a href="{{ route('roles.index') }}" class='sidebar-link'>
@@ -253,7 +253,7 @@
                         <li class="sidebar-item">
                             <a href="{{ route('staff.index') }}" class='sidebar-link'>
                                 <i class="bi bi-gear"></i>
-                                <span class="menu-item">{{ __('Staff Management') }}</span>
+                                <span class="menu-item">{{ __('User Management') }}</span>
                             </a>
                         </li>
                     @endcanany

@@ -60,12 +60,11 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::get('verification-fields', [ApiController::class, 'getVerificationFields']);
     Route::post('send-verification-request',[ApiController::class,'sendVerificationRequest']);
     Route::get('verification-request',[ApiController::class,'getVerificationRequest']);
-
-
 });
 
-
 /* Non Authenticated Routes */
+
+Route::post('login', [ApiController::class, 'login']);
 Route::get('get-package', [ApiController::class, 'getPackage']);
 Route::get('get-languages', [ApiController::class, 'getLanguages']);
 Route::post('user-signup', [ApiController::class, 'userSignup']);
