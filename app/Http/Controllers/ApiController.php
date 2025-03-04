@@ -203,17 +203,10 @@ class ApiController extends Controller
             if ($request->userType === 'Provider') {
                 if ($request->providerType === 'Expert') {
                     $userData['expertise'] = $request->expertise ?? 'General Expert';
-                    $userData['deleted_at'] = now();
                 } elseif ($request->providerType === 'Business') {
                     $userData['business_description'] = $request->business_description ?? 'Business Provider';
-                    $userData['deleted_at'] = now();
                 }
-            } else {
-                // For Client type users
-                $userData['deleted_at'] = null;
             }
-            Log::info("user type: " . $request->userType);
-            Log::info("deleted at: " . $userData['deleted_at']);
 
             $user = User::updateOrCreate(
                 ['email' => $request->email],
@@ -246,8 +239,17 @@ class ApiController extends Controller
 
             DB::commit();
 
-            // 9️⃣ Return Success Response
-            return ResponseService::successResponse('User signed up successfully', $user, ['token' => $token]);
+            // Generate Sanctum token
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            // Get the user's role
+            $user->getRoleNames()->first();
+
+            return response()->json([
+                'status' => true,
+                'token' => $token,
+                'user' => $user,
+            ]);
         } catch (Throwable $th) {
             DB::rollBack();
             ResponseService::logErrorResponse($th, "API Controller -> Signup");
