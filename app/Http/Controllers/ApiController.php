@@ -91,12 +91,17 @@ class ApiController extends Controller
         $token = $user->createToken('auth_token')->plainTextToken;
 
         // Get the user's role
-        $user->getRoleNames()->first();
+        $role = $user->getRoleNames()->first();
+        
+        // Determine user type based on role
+        $userType = in_array($role, ['Expert', 'Business']) ? 'Provider' : 'Client';
 
         return response()->json([
             'status' => true,
             'token' => $token,
             'user' => $user,
+            'role' => $role,
+            'userType' => $userType
         ]);
     }
 
