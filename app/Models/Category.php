@@ -17,7 +17,8 @@ class Category extends Model {
         'image',
         'slug',
         'status',
-        'description'
+        'description',
+        'type'
     ];
 
     public function getParentKeyName() {

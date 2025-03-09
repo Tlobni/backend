@@ -34,14 +34,25 @@
                                         <input type="text" name="name" id="name" class="form-control" data-parsley-required="true" value="{{ $category_data->name }}">
                                     </div>
                                 </div>
-                                {{-- <div class="col-md-6">
+                                <div class="col-md-6">
                                     <div class="col-md-12 form-group mandatory">
-                                        <label for="p_category" class="mandatory form-label">{{ __('Parent Category') }}</label>
-                                        <select name="selected_category" class="form-select form-control" id="p_category" data-placeholder="{{__("Select Category")}}">
-                                            <option value="{{ $parent_category }}" disabled id="default_opt" selected>{{ $parent_category == '' ? 'Root' : $parent_category }}</option>
+                                        <label for="category_type" class="mandatory form-label">{{ __('Category Type') }}</label>
+                                        <select name="type" id="category_type" class="form-select form-control" data-parsley-required="true" onchange="loadParentCategories()">
+                                            <option value="service_experience" {{ $category_data->type == 'service_experience' ? 'selected' : '' }}>{{ __('Service & Experience') }}</option>
+                                            <option value="providers" {{ $category_data->type == 'providers' ? 'selected' : '' }}>{{ __('Providers') }}</option>
                                         </select>
                                     </div>
-                                </div> --}}
+                                </div>
+
+                                <div class="col-md-6">
+                                    <div class="col-md-12 form-group">
+                                        <label for="p_category" class="form-label">{{ __('Parent Category') }}</label>
+                                        <select name="parent_category_id" id="p_category" class="form-select form-control" data-placeholder="{{__("Select Category")}}">
+                                            <option value="">{{__("Select a Category")}}</option>
+                                        </select>
+                                    </div>
+                                </div>
+
                                 <div class="col-md-12">
                                     <div class="col-md-12 form-group mandatory">
                                         <label for="slug" class="form-label">{{ __('Slug') }} <small>(English Only)</small></label>
@@ -97,3 +108,78 @@
         </div>
     </section>
 @endsection
+
+<!-- Make sure jQuery is loaded -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<script>
+    // Load parent categories when the page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        loadParentCategories({{ $category_data->parent_category_id ?? 'null' }});
+    });
+    
+    function loadParentCategories(selectedParentId = null) {
+        const typeSelect = document.getElementById('category_type');
+        const parentCategorySelect = document.getElementById('p_category');
+        const selectedType = typeSelect.value;
+        const currentCategoryId = {{ $category_data->id }};
+        
+        // Clear current options except the first one
+        while (parentCategorySelect.options.length > 1) {
+            parentCategorySelect.remove(1);
+        }
+        
+        // If no type is selected, return
+        if (!selectedType) {
+            console.log('No type selected');
+            return;
+        }
+        
+        console.log('Loading parent categories for type:', selectedType);
+        console.log('Current category ID:', currentCategoryId);
+        console.log('Selected parent ID:', selectedParentId);
+        
+        // Use fetch API
+        fetch('{{ url("category/get-parent-categories") }}?type=' + selectedType)
+            .then(response => response.json())
+            .then(data => {
+                console.log('Response data:', data);
+                if (data.success) {
+                    // Add options for each parent category
+                    data.categories.forEach(function(category) {
+                        // Skip the current category to prevent self-reference
+                        if (category.id == currentCategoryId) {
+                            console.log('Skipping current category:', category.name);
+                            return;
+                        }
+                        
+                        const option = document.createElement('option');
+                        option.value = category.id;
+                        option.textContent = category.name;
+                        
+                        // Add indentation based on level
+                        if (category.level > 0) {
+                            option.textContent = '- '.repeat(category.level) + option.textContent;
+                        }
+                        
+                        // Select the parent category if it matches
+                        if (selectedParentId && category.id == selectedParentId) {
+                            option.selected = true;
+                            console.log('Selected parent category:', category.name);
+                        }
+                        
+                        parentCategorySelect.appendChild(option);
+                    });
+                    
+                    if (data.categories.length === 0) {
+                        console.log('No parent categories found for type:', selectedType);
+                    }
+                } else {
+                    console.error('Error from server:', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading parent categories:', error);
+            });
+    }
+</script>

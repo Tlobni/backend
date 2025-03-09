@@ -35,6 +35,15 @@
                                         ]) }}
                                     </div>
 
+                                    <div class="col-md-12 col-12 form-group mandatory">
+                                        {{ Form::label('item_type', __('Item Type'), ['class' => 'form-label col-12 ']) }}
+                                        {{ Form::select('item_type', ['services' => __('Services'), 'experiences' => __('Experiences')], null, [
+                                            'class' => 'form-control',
+                                            'data-parsley-required' => 'true',
+                                            'id' => 'item_type',
+                                        ]) }}
+                                    </div>
+
                                     <div class="col-md-12 col-12 form-group">
                                         {{ Form::label('ios_product_id', __('IOS Product ID'), ['class' => 'form-label col-12 ']) }}
                                         {{ Form::text('ios_product_id', '', [
@@ -204,6 +213,7 @@
                                         <th scope="col" data-field="id" data-align="center" data-sortable="true">{{ __('ID') }}</th>
                                         <th scope="col" data-field="icon" data-formatter="imageFormatter" data-align="center">{{ __('Image') }}</th>
                                         <th scope="col" data-field="name" data-align="center" data-sortable="true">{{ __('Name') }}</th>
+                                        <th scope="col" data-field="item_type" data-align="center" data-sortable="true">{{ __('Item Type') }}</th>
                                         <th scope="col" data-field="duration" data-align="center" data-sortable="true">{{ __('Days') }}</th>
                                         <th scope="col" data-field="item_limit" data-align="center" data-sortable="true">{{ __('Item Limit') }}</th>
                                         <th scope="col" data-field="price" data-align="center" data-sortable="true">{{ __('Price') }}</th>
@@ -243,6 +253,15 @@
                                             <label for="edit_name" class="form-label col-12 ">{{ __('Name') }}</label>
                                             <input type="text" id="edit_name" class="form-control col-12" placeholder="{{__("Name")}}" name="name" data-parsley-required="true">
                                         </div>
+                                    </div>
+
+                                    <div class="col-md-6 col-12 form-group mandatory">
+                                        {{ Form::label('item_type', __('Item Type'), ['class' => 'form-label col-12 ']) }}
+                                        {{ Form::select('item_type', ['services' => __('Services'), 'experiences' => __('Experiences')], null, [
+                                            'class' => 'form-control',
+                                            'data-parsley-required' => 'true',
+                                            'id' => 'edit_item_type',
+                                        ]) }}
                                     </div>
 
                                     <div class="col-md-6 col-12 form-group">

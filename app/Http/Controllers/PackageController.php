@@ -44,6 +44,7 @@ class PackageController extends Controller {
             'item_limit'             => 'required_if:limit_type,limited',
             'icon'                   => 'required|mimes:jpeg,jpg,png|max:6144',
             'description'            => 'required',
+            'item_type'              => 'required|in:services,experiences',
         ]);
 
         if ($validator->fails()) {
@@ -87,9 +88,7 @@ class PackageController extends Controller {
         $rows = array();
         foreach ($result as $key => $row) {
             $tempRow = $row->toArray();
-            if (Auth::user()->can('item-listing-package-update')) {
-                $tempRow['operate'] = BootstrapTableService::editButton(route('package.update', $row->id), true);
-            }
+            $tempRow['operate'] = BootstrapTableService::editButton(route('package.update', $row->id), true);
             $rows[] = $tempRow;
         }
 
@@ -110,6 +109,7 @@ class PackageController extends Controller {
             'item_limit'             => 'required_if:limit_type,limited',
             'icon'                   => 'nullable|mimes:jpeg,jpg,png|max:6144',
             'description'            => 'required',
+            'item_type'              => 'required|in:services,experiences',
         ]);
 
         if ($validator->fails()) {
@@ -167,11 +167,7 @@ class PackageController extends Controller {
         foreach ($result as $key => $row) {
             $tempRow = $row->toArray();
             $operate = '';
-//            $operate = '&nbsp;&nbsp;<a  id="' . $row->id . '"  class="btn icon btn-primary btn-sm rounded-pill mt-2 edit_btn editdata"  data-bs-toggle="modal" data-bs-target="#editModal"   title="Edit"><i class="fa fa-edit edit_icon"></i></a>';
-            if (Auth::user()->can('advertisement-package-update')) {
-                $operate .= BootstrapTableService::editButton(route('package.advertisement.update', $row->id), true);
-            }
-
+            $operate .= BootstrapTableService::editButton(route('package.advertisement.update', $row->id), true);
             $tempRow['operate'] = $operate;
             $rows[] = $tempRow;
         }
@@ -315,5 +311,35 @@ class PackageController extends Controller {
 
         $bulkData['rows'] = $rows;
         return response()->json($bulkData);
+    }
+
+    public function approveUserPackage($id)
+    {
+        ResponseService::noPermissionThenRedirect('user-package-update');
+        try {
+            $userPackage = UserPurchasedPackage::findOrFail($id);
+            $userPackage->update(['status' => 1]); // Approved
+            
+            // Return a success message and refresh the page
+            return redirect()->route('package.users.index')->with('success', 'Package approved successfully');
+        } catch (Throwable $th) {
+            ResponseService::logErrorResponse($th, "PackageController -> approveUserPackage");
+            return redirect()->route('package.users.index')->with('error', 'Something went wrong');
+        }
+    }
+
+    public function rejectUserPackage($id)
+    {
+        ResponseService::noPermissionThenRedirect('user-package-update');
+        try {
+            $userPackage = UserPurchasedPackage::findOrFail($id);
+            $userPackage->update(['status' => 0]); // Blocked
+            
+            // Return a success message and refresh the page
+            return redirect()->route('package.users.index')->with('success', 'Package blocked successfully');
+        } catch (Throwable $th) {
+            ResponseService::logErrorResponse($th, "PackageController -> rejectUserPackage");
+            return redirect()->route('package.users.index')->with('error', 'Something went wrong');
+        }
     }
 }

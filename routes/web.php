@@ -107,15 +107,32 @@ Route::group(['middleware' => ['auth', 'language']], static function () {
     /*** Home Module : END ***/
 
     /*** Category Module : START ***/
-    Route::resource('category', CategoryController::class);
-    Route::group(['prefix' => 'category'], static function () {
-        Route::get('/{id}/subcategories', [CategoryController::class, 'getSubCategories'])->name('category.subcategories');
-        Route::get('/{id}/custom-fields', [CategoryController::class, 'customFields'])->name('category.custom-fields');
-        Route::get('/{id}/custom-fields/show', [CategoryController::class, 'getCategoryCustomFields'])->name('category.custom-fields.show');
-        Route::delete('/{id}/custom-fields/{customFieldID}/delete', [CategoryController::class, 'destroyCategoryCustomField'])->name('category.custom-fields.destroy');
-        Route::get('/categories/order', [CategoryController::class, 'categoriesReOrder'])->name('category.order');
-        Route::post('categories/change-order', [CategoryController::class, 'updateOrder'])->name('category.order.change');
-        Route::get('/{id}/sub-category/change-order', [CategoryController::class, 'subCategoriesReOrder'])->name('sub.category.order.change');
+    // Test route for debugging
+    Route::get('test-parent-categories', function() {
+        $controller = new \App\Http\Controllers\CategoryController();
+        $request = new \Illuminate\Http\Request(['type' => 'service_experience']);
+        return $controller->getParentCategories($request);
+    });
+
+    // Test view for debugging
+    Route::get('test-parent-categories-view', function() {
+        return view('test-parent-categories');
+    });
+
+    // Make this route accessible without authentication for testing
+    Route::get('category/get-parent-categories', [CategoryController::class, 'getParentCategories'])->name('category.get-parent-categories');
+
+    Route::middleware(['auth'])->group(function () {
+        Route::resource('category', CategoryController::class);
+        Route::group(['prefix' => 'category'], static function () {
+            Route::get('/{id}/subcategories', [CategoryController::class, 'getSubCategories'])->name('category.subcategories');
+            Route::get('/{id}/custom-fields', [CategoryController::class, 'customFields'])->name('category.custom-fields');
+            Route::get('/{id}/custom-fields/show', [CategoryController::class, 'getCategoryCustomFields'])->name('category.custom-fields.show');
+            Route::delete('/{id}/custom-fields/{customFieldID}/delete', [CategoryController::class, 'destroyCategoryCustomField'])->name('category.custom-fields.destroy');
+            Route::get('/categories/order', [CategoryController::class, 'categoriesReOrder'])->name('category.order');
+            Route::post('categories/change-order', [CategoryController::class, 'updateOrder'])->name('category.order.change');
+            Route::get('/{id}/sub-category/change-order', [CategoryController::class, 'subCategoriesReOrder'])->name('sub.category.order.change');
+        });
     });
     /*** Category Module : END ***/
 
@@ -224,9 +241,15 @@ Route::group(['middleware' => ['auth', 'language']], static function () {
     /*** Customer Module : START ***/
     Route::group(['prefix' => 'customer'], static function () {
         Route::post('/assign-package', [CustomersController::class, 'assignPackage'])->name('customer.assign.package');
+        Route::get('/list-by-role', [CustomersController::class, 'listByRole'])->name('customer.list-by-role');
     });
     Route::resource('customer', CustomersController::class);
 
+    // Customer routes
+    Route::get('customer', [CustomersController::class, 'index'])->name('customer.index');
+    Route::get('clients', [CustomersController::class, 'clients'])->name('customer.clients');
+    Route::get('business', [CustomersController::class, 'business'])->name('customer.business');
+    Route::get('experts', [CustomersController::class, 'experts'])->name('customer.experts');
 
     /*** Customer Module : END ***/
 
@@ -243,6 +266,8 @@ Route::group(['middleware' => ['auth', 'language']], static function () {
         Route::put('/advertisement/{id}/update', [PackageController::class, 'advertisementUpdate'])->name('package.advertisement.update');
         Route::get('/users/', [PackageController::class, 'userPackagesIndex'])->name('package.users.index');
         Route::get('/users/show', [PackageController::class, 'userPackagesShow'])->name('package.users.show');
+        Route::get('/users/approve/{id}', [PackageController::class, 'approveUserPackage'])->name('package.users.approve');
+        Route::get('/users/reject/{id}', [PackageController::class, 'rejectUserPackage'])->name('package.users.reject');
         Route::get('/payment-transactions/', [PackageController::class, 'paymentTransactionIndex'])->name('package.payment-transactions.index');
         Route::get('/payment-transactions/show', [PackageController::class, 'paymentTransactionShow'])->name('package.payment-transactions.show');
     });
@@ -374,3 +399,16 @@ Route::get('/test-log', function () {
 
     return response()->json(['message' => 'Log test successful']);
 });
+
+// Service and Experience Item Management routes
+Route::get('service-items', [ItemController::class, 'serviceItems'])->name('service.items.index');
+Route::get('experience-items', [ItemController::class, 'experienceItems'])->name('experience.items.index');
+
+// Data routes for service and experience items
+Route::get('service-items/data', [ItemController::class, 'serviceItemsData'])->name('service.items.data');
+Route::get('experience-items/data', [ItemController::class, 'experienceItemsData'])->name('experience.items.data');
+
+// Keep your existing item routes
+Route::get('item/{id}', [ItemController::class, 'showItem'])->name('item.show');
+Route::post('item/approval/{id}', [ItemController::class, 'updateItemApproval'])->name('item.approval');
+Route::delete('item/{id}', [ItemController::class, 'destroy'])->name('item.destroy');

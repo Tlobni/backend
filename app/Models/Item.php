@@ -15,6 +15,7 @@ class Item extends Model {
 
     protected $fillable = [
         'category_id',
+        'provider_item_type',
         'name',
         'price',
         'description',

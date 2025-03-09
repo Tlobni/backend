@@ -24,7 +24,7 @@
                 
                 @canany(['role-list', 'role-create', 'role-update', 'role-delete', 'staff-list', 'staff-create',
                     'staff-update', 'staff-delete'])
-                    <div class="sidebar-new-title">{{ __('User Management') }}</div>
+                    <div class="sidebar-new-title">{{ __('Staff Management') }}</div>
                     @canany(['role-list', 'role-create', 'role-update', 'role-delete'])
                         <li class="sidebar-item">
                             <a href="{{ route('roles.index') }}" class='sidebar-link'>
@@ -37,7 +37,29 @@
                         <li class="sidebar-item">
                             <a href="{{ route('staff.index') }}" class='sidebar-link'>
                                 <i class="bi bi-gear"></i>
-                                <span class="menu-item">{{ __('User Management') }}</span>
+                                <span class="menu-item">{{ __('Staff Management') }}</span>
+                            </a>
+                        </li>
+                    @endcanany
+                    
+                    @canany(['customer-list', 'customer-create', 'customer-update', 'customer-delete'])
+                        <div class="sidebar-new-title">{{ __('Customers') }}</div>
+                        <li class="sidebar-item">
+                            <a href="{{ route('customer.clients') }}" class='sidebar-link'>
+                                <i class="bi bi-person"></i>
+                                <span class="menu-item">{{ __('Clients') }}</span>
+                            </a>
+                        </li>
+                        <li class="sidebar-item">
+                            <a href="{{ route('customer.business') }}" class='sidebar-link'>
+                                <i class="bi bi-building"></i>
+                                <span class="menu-item">{{ __('Business') }}</span>
+                            </a>
+                        </li>
+                        <li class="sidebar-item">
+                            <a href="{{ route('customer.experts') }}" class='sidebar-link'>
+                                <i class="bi bi-person-badge"></i>
+                                <span class="menu-item">{{ __('Experts') }}</span>
                             </a>
                         </li>
                     @endcanany
@@ -66,27 +88,20 @@
                 @endcanany
 
 
-                @canany(['item-list', 'item-create', 'item-update', 'item-delete', 'tip-list', 'tip-create',
-                    'tip-update', 'tip-delete'])
-
-                    <div class="sidebar-new-title">{{ __('Items Management') }}</div>
-                    @canany(['item-list', 'item-create', 'item-update', 'item-delete'])
-                        <li class="sidebar-item">
-                            <a href="{{ Route('item.index') }}" class='sidebar-link'>
-                                <i class="bi bi-ui-radios-grid"></i>
-                                <span class="menu-item">{{ __('Items') }}</span>
-                            </a>
-                        </li>
-                    @endcanany
-                    @canany(['tip-list', 'tip-create', 'tip-update', 'tip-delete'])
-                        <li class="sidebar-item sidebar-submenus">
-                            <a href="{{ route('tips.index') }}" class='sidebar-link'>
-                                <i class="bi bi-info-circle"></i>
-                                <span class="menu-item">{{ __('Tips') }}</span>
-                            </a>
-                        </li>
-                    @endcanany
-                @endcanany
+                @can('item-list')
+                    <li class="sidebar-item">
+                        <a href="{{ route('service.items.index') }}" class="sidebar-link">
+                            <i class="bi bi-tools"></i>
+                            <span>{{ __('Service Item Management') }}</span>
+                        </a>
+                    </li>
+                    <li class="sidebar-item">
+                        <a href="{{ route('experience.items.index') }}" class="sidebar-link">
+                            <i class="bi bi-compass"></i>
+                            <span>{{ __('Experience Item Management') }}</span>
+                        </a>
+                    </li>
+                @endcan
 
 
                 @canany(['item-listing-package-list', 'item-listing-package-create', 'item-listing-package-update',
@@ -132,7 +147,7 @@
                     @endcan
                 @endcanany
 
-                {{-- @canany(['seller-verification-field-list', 'seller-verification-field-create', 'seller-verification-field-update', 'seller-verification-field-delete', 'seller-verification-request-list', 'seller-verification-request-create', 'seller-verification-request-update', 'seller-verification-request-delete', 'seller-review-list', 'seller-review-update', 'seller-review-delete'])
+                @canany(['seller-verification-field-list', 'seller-verification-field-create', 'seller-verification-field-update', 'seller-verification-field-delete', 'seller-verification-request-list', 'seller-verification-request-create', 'seller-verification-request-update', 'seller-verification-request-delete', 'seller-review-list', 'seller-review-update', 'seller-review-delete'])
                     <div class="sidebar-new-title">{{ __('Seller Management') }}</div>
                     @canany(['seller-verification-request-list', 'seller-verification-request-create', 'seller-verification-request-update', 'seller-verification-request-delete'])
                         <li class="sidebar-item">
@@ -167,7 +182,7 @@
                             </a>
                         </li>
                     @endcanany
-                @endcanany --}}
+                @endcanany
                 {{-- @canany(['slider-list', 'slider-create', 'slider-update', 'slider-delete', 'feature-section-list', 'feature-section-create', 'feature-section-update', 'feature-section-delete'])
                     <div class="sidebar-new-title">{{ __('Home Screen Management') }}</div>
                     @canany(['slider-list', 'slider-create', 'slider-update', 'slider-delete'])
@@ -264,15 +279,6 @@
                         </li>
                     @endcanany
 
-                    {{-- @canany(['customer-list', 'customer-create', 'customer-update', 'customer-delete'])
-                        <div class="sidebar-new-title">{{ __('Customers') }}</div>
-                        <li class="sidebar-item">
-                            <a href="{{ url('customer') }}" class='sidebar-link'>
-                                <i class="bi bi-people"></i>
-                                <span class="menu-item">{{ __('Customers') }}</span>
-                            </a>
-                        </li>
-                    @endcanany --}}
                 @endcanany
 
 

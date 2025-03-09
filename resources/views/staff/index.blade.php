@@ -1,17 +1,17 @@
 @extends('layouts.main')
 
 @section('title')
-    {{__("User Management")}}
+    {{__("Staff Management")}}
 @endsection
 
 @section('content')
     <div class="page-header">
         <h3 class="page-title">
-            {{__('User Management')}}
+            {{__('Staff Management')}}
         </h3>
         @can('role-create')
             <div class="buttons">
-                <a class="btn btn-primary" href="{{ route('staff.create') }}"> {{ __('Create New User') }}</a>
+                <a class="btn btn-primary" href="{{ route('staff.create') }}"> {{ __('Create New Staff') }}</a>
             </div>
         @endcan
     </div>
@@ -37,8 +37,7 @@
                                 <th scope="col" data-field="id" data-sortable="true" data-align="center">{{__("ID")}}</th>
                                 <th scope="col" data-field="name" data-sortable="true" data-align="center">{{__("Name")}}</th>
                                 <th scope="col" data-field="email" data-sortable="true" data-align="center">{{__("Email")}}</th>
-                                <th scope="col" data-field="roles" data-sortable="true" data-align="center">{{__("Roles")}}</th> <!-- ✅ Add Roles Column -->
-
+                                <th scope="col" data-field="role_name" data-formatter="roleFormatter" data-sortable="true" data-align="center">{{__("Role")}}</th>
                                 @can('staff-update')
                                     <th scope="col" data-field="status" data-formatter="statusSwitchFormatter" data-sortable="false" data-align="center">{{__("Status")}}</th>
                                 @endcan
@@ -132,4 +131,45 @@
             </div>
         </div>
     @endcan
+@endsection
+
+@section('js')
+<script>
+    // Format the role name with appropriate styling
+    function roleFormatter(value, row) {
+        if (value === 'Super Admin') {
+            return '<span class="badge bg-primary">' + value + '</span>';
+        } else if (value === 'Staff') {
+            return '<span class="badge bg-info">' + value + '</span>';
+        }
+        return value;
+    }
+    
+    // Custom status formatter that checks if status is editable
+    function statusSwitchFormatter(value, row) {
+        // If this is the current user, show a non-editable status badge instead of a toggle
+        if (!row.status_editable) {
+            return '<span class="badge bg-success">Active</span> <small class="text-muted">(current user)</small>';
+        }
+        
+        // Otherwise use the standard status toggle
+        var checked = value ? 'checked' : '';
+        var html = '<div class="form-check form-switch">';
+        html += '<input class="form-check-input status-switch" type="checkbox" ' + checked + ' data-id="' + row.id + '">';
+        html += '</div>';
+        return html;
+    }
+    
+    // Add row class based on role
+    $(document).ready(function() {
+        $('#table_list').on('post-body.bs.table', function() {
+            $('#table_list tbody tr').each(function() {
+                var role = $(this).find('td[data-field="role_name"]').text();
+                if (role.includes('Super Admin')) {
+                    $(this).addClass('table-primary');
+                }
+            });
+        });
+    });
+</script>
 @endsection

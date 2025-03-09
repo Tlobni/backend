@@ -18,6 +18,7 @@ class UserPurchasedPackage extends Model {
         'total_limit',
         'used_limit',
         'payment_transactions_id',
+        'status',
     ];
 
     protected $appends = ['remaining_days', 'remaining_item_limit'];
@@ -35,11 +36,16 @@ class UserPurchasedPackage extends Model {
     }
 
     public function scopeOnlyActive($query) {
-        return $query->where('user_id', Auth::user()->id)->whereDate('start_date', '<=', date('Y-m-d'))->where(function ($q) {
-            $q->whereDate('end_date', '>', date('Y-m-d'))->orWhereNull('end_date');
-        })->where(function ($q) {
-            $q->whereColumn('used_limit', '<', 'total_limit')->orWhereNull('total_limit');
-        })->orderBy('end_date', 'asc');
+        return $query->where('user_id', Auth::user()->id)
+            ->where('status', 1) // Only approved packages
+            ->whereDate('start_date', '<=', date('Y-m-d'))
+            ->where(function ($q) {
+                $q->whereDate('end_date', '>', date('Y-m-d'))->orWhereNull('end_date');
+            })
+            ->where(function ($q) {
+                $q->whereColumn('used_limit', '<', 'total_limit')->orWhereNull('total_limit');
+            })
+            ->orderBy('end_date', 'asc');
     }
 
     public function getRemainingDaysAttribute() {

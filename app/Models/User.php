@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasPermissions;
 use Spatie\Permission\Traits\HasRoles;
+use Illuminate\Support\Carbon;
 
 class User extends Authenticatable
 {
@@ -34,7 +35,14 @@ class User extends Authenticatable
         'show_personal_details',
         'is_verified',
         'auto_approve_item',
-        'deleted_at'
+        'deleted_at',
+        'business_name',
+        'categories',
+        'phone',
+        'gender',
+        'location',
+        'platform_type',
+        'provider_type'
     ];
 
     /**

@@ -19,6 +19,21 @@
     <section class="section">
         <div class="row">
             <div class="col-md-12">
+                <!-- Display flash messages -->
+                @if(session('success'))
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        {{ session('success') }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                @endif
+
+                @if(session('error'))
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        {{ session('error') }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                @endif
+
                 <div class="card">
                     <div class="card-body">
 
@@ -48,6 +63,8 @@
                                         <th scope="col" data-field="end_date" data-align="center" data-formatter="unlimitedBadgeFormatter" data-sortable="true">{{ __('End Date') }}</th>
                                         <th scope="col" data-field="total_limit" data-align="center" data-formatter="unlimitedBadgeFormatter" data-sortable="true">{{ __('Total Limit') }}</th>
                                         <th scope="col" data-field="used_limit" data-align="center" data-sortable="true">{{ __('Used Limit') }}</th>
+                                        <th scope="col" data-field="status" data-align="center" data-formatter="statusFormatter" data-sortable="true">{{ __('Status') }}</th>
+                                        <th scope="col" data-field="operate" data-align="center" data-formatter="packageActionFormatter">{{ __('Action') }}</th>
                                     </tr>
                                     </thead>
                                 </table>
@@ -57,4 +74,39 @@
                 </div>
             </div>
         </div>
+@endsection
+
+@section('script')
+    <script>
+        // Define baseUrl variable
+        var baseUrl = '{{ url('/package') }}';
+        
+        // Refresh the table when the page loads
+        $(document).ready(function() {
+            // Auto-refresh the table after a short delay
+            setTimeout(function() {
+                $('#table_list').bootstrapTable('refresh');
+            }, 500);
+        });
+        
+        function statusFormatter(value, row) {
+            if (value == 1) {
+                return '<span class="badge bg-success">Approved</span>';
+            } else {
+                return '<span class="badge bg-danger">Blocked</span>';
+            }
+        }
+
+        function packageActionFormatter(value, row) {
+            let html = '';
+            if (row.status == 0) {
+                // If blocked, show approve button (arrow)
+                html += '<a href="' + baseUrl + '/users/approve/' + row.id + '" class="btn btn-sm btn-success" title="Approve"><i class="bi bi-arrow-up-circle"></i></a> ';
+            } else {
+                // If approved, show block button (X)
+                html += '<a href="' + baseUrl + '/users/reject/' + row.id + '" class="btn btn-sm btn-danger" title="Block"><i class="bi bi-x-circle"></i></a>';
+            }
+            return html;
+        }
+    </script>
 @endsection

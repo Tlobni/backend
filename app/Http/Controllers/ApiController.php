@@ -135,6 +135,7 @@ class ApiController extends Controller
     public function userSignup(Request $request)
     {
         try {
+            Log::info('User Signup Request', $request->all());
             // 1️⃣ Validate Request
             $validator = Validator::make($request->all(), [
                 'type'          => 'required|in:email,google,phone,apple',
@@ -142,11 +143,11 @@ class ApiController extends Controller
                 'password'      => 'required_if:type,email|string|min:6',
                 'firebase_id'   => 'required',
                 'country_code'  => 'nullable|string',
-                'flag'          => 'boolean',
                 'platform_type' => 'nullable|in:android,ios',
                 'fullName'      => 'nullable|string',
                 'gender'        => 'nullable|in:Male,Female,Other',
                 'location'      => 'nullable|string',
+                'userType'      => 'nullable|in:Provider,Client',
                 'providerType'  => 'nullable|in:Expert,Business',
                 'businessName'  => 'nullable|string',
                 'categories'    => 'nullable|string',
@@ -189,31 +190,24 @@ class ApiController extends Controller
                 'name' => $request->fullName,
                 'gender' => $request->gender,
                 'location' => $request->location,
-                'provider_type' => $request->providerType,
                 'business_name' => $request->businessName,
+                'city' => $request->city,
                 'categories' => $request->categories,
                 'phone' => $request->phone,
                 'platform_type' => $request->platform_type,
+                'type' => $request->type,
+                'firebase_id' => $request->firebase_id,
                 'profile' => $request->hasFile('profile')
                     ? $request->file('profile')->store('user_profile', 'public')
-                    : $request->profile,
+                    : null,
             ];
-
-            // Set default values based on user type
-            if ($request->userType === 'Provider') {
-                if ($request->providerType === 'Expert') {
-                    $userData['expertise'] = $request->expertise ?? 'General Expert';
-                } elseif ($request->providerType === 'Business') {
-                    $userData['business_description'] = $request->business_description ?? 'Business Provider';
-                }
-            }
 
             $user = User::updateOrCreate(
                 ['email' => $request->email],
                 $userData
             );
 
-            // 5️⃣ Assign Role Based on Provider Type
+            // 5️⃣ Assign Role Based on User Type
             if ($request->userType === 'Provider') {
                 if ($request->providerType === 'Expert') {
                     $user->syncRoles(['Expert']);
@@ -235,12 +229,9 @@ class ApiController extends Controller
             Auth::login($user);
 
             // 8️⃣ Generate Token
-            $token = $user->createToken($user->name ?? '')->plainTextToken;
+            $token = $user->createToken('auth_token')->plainTextToken;
 
             DB::commit();
-
-            // Generate Sanctum token
-            $token = $user->createToken('auth_token')->plainTextToken;
 
             // Get the user's role
             $user->getRoleNames()->first();
@@ -280,7 +271,9 @@ class ApiController extends Controller
             $data = $app_user->type == "google" ? $request->except('email') : $request->all();
 
             if ($request->hasFile('profile')) {
-                $data['profile'] = FileService::compressAndReplace($request->file('profile'), 'profile', $app_user->getRawOriginal('profile'));
+                // Get original profile value
+                $originalProfile = DB::table('users')->where('id', $app_user->id)->value('profile');
+                $data['profile'] = FileService::compressAndReplace($request->file('profile'), 'profile', $originalProfile);
             }
 
             if (!empty($request->fcm_id)) {
@@ -288,8 +281,13 @@ class ApiController extends Controller
             }
             $data['show_personal_details'] = $request->show_personal_details;
 
-            $app_user->update($data);
-            ResponseService::successResponse("Profile Updated Successfully", $app_user);
+            // Update user data
+            DB::table('users')->where('id', $app_user->id)->update($data);
+            
+            // Get updated user
+            $updatedUser = User::find($app_user->id);
+            
+            ResponseService::successResponse("Profile Updated Successfully", $updatedUser);
         } catch (Throwable $th) {
             ResponseService::logErrorResponse($th, 'API Controller -> updateProfile');
             ResponseService::errorResponse();
@@ -354,7 +352,7 @@ class ApiController extends Controller
             $package = Package::where(['final_price' => 0, 'id' => $request->package_id])->firstOrFail();
             $activePackage = UserPurchasedPackage::where(['package_id' => $request->package_id, 'user_id' => Auth::user()->id])->first();
             if (!empty($activePackage)) {
-                ResponseService::errorResponse("You already have purchased this package");
+                ResponseService::errorResponse("You already have applied for this package");
             }
 
             UserPurchasedPackage::create([
@@ -362,9 +360,10 @@ class ApiController extends Controller
                 'package_id'  => $request->package_id,
                 'start_date'  => Carbon::now(),
                 'total_limit' => $package->item_limit == "unlimited" ? null : $package->item_limit,
-                'end_date'    => $package->duration == "unlimited" ? null : Carbon::now()->addDays($package->duration)
+                'end_date'    => $package->duration == "unlimited" ? null : Carbon::now()->addDays($package->duration),
+                'status'      => 0 
             ]);
-            ResponseService::successResponse('Package Purchased Successfully');
+            ResponseService::successResponse('Package Purchased Applied. Waiting for admin approval.');
         } catch (Throwable $th) {
             ResponseService::logErrorResponse($th, "API Controller -> assignFreePackage");
             ResponseService::errorResponse();
@@ -1408,7 +1407,7 @@ class ApiController extends Controller
 
             $purchasedPackage = UserPurchasedPackage::onlyActive()->where(['user_id' => Auth::user()->id, 'package_id' => $request->package_id])->first();
             if (!empty($purchasedPackage)) {
-                ResponseService::errorResponse("You already have purchased this package");
+                ResponseService::errorResponse("You already have applied for this package");
             }
             //Add Payment Data to Payment Transactions Table
             $paymentTransactionData = PaymentTransaction::create([
@@ -1485,9 +1484,9 @@ class ApiController extends Controller
 
     public function createItemOffer(Request $request)
     {
-
         $validator = Validator::make($request->all(), [
             'item_id' => 'required|integer',
+            // Make amount optional, will default to 0
             'amount'  => 'nullable|numeric',
         ]);
         if ($validator->fails()) {
@@ -1495,11 +1494,15 @@ class ApiController extends Controller
         }
         try {
             $item = Item::approved()->notOwner()->findOrFail($request->item_id);
+            
+            // Set default amount to 0 if not provided
+            $amount = $request->has('amount') ? $request->amount : 0;
+            
             $itemOffer = ItemOffer::updateOrCreate([
                 'item_id'   => $request->item_id,
                 'buyer_id'  => Auth::user()->id,
                 'seller_id' => $item->user_id,
-            ], ['amount' => $request->amount,]);
+            ], ['amount' => $amount]);
 
             $itemOffer = $itemOffer->load('seller:id,name,profile', 'buyer:id,name,profile', 'item:id,name,description,price,image');
 
@@ -1519,13 +1522,13 @@ class ApiController extends Controller
             ];
             /* message_type is reserved keyword in FCM so removed here*/
             unset($fcmMsg['message_type']);
-            if ($request->has('amount') && $request->amount != 0) {
-                $user_token = UserFcmToken::where('user_id', $item->user->id)->pluck('fcm_token')->toArray();
-                $message = 'new offer is created by buyer';
-                NotificationService::sendFcmNotification($user_token, 'New Offer', $message, "offer", $fcmMsg);
-            }
+            
+            // Always send notification regardless of amount
+            $user_token = UserFcmToken::where('user_id', $item->user->id)->pluck('fcm_token')->toArray();
+            $message = 'New chat request from buyer';
+            NotificationService::sendFcmNotification($user_token, 'New Chat Request', $message, "offer", $fcmMsg);
 
-            ResponseService::successResponse("Item Offer Created Successfully", $itemOffer,);
+            ResponseService::successResponse("Chat request sent successfully", $itemOffer);
         } catch (Throwable $th) {
             ResponseService::logErrorResponse($th, "API Controller -> createItemOffer");
             ResponseService::errorResponse();
@@ -1753,7 +1756,7 @@ class ApiController extends Controller
             $package = Package::findOrFail($request->package_id);
             $purchasedPackage = UserPurchasedPackage::where(['user_id' => Auth::user()->id, 'package_id' => $request->package_id])->first();
             if (!empty($purchasedPackage)) {
-                ResponseService::errorResponse("You already have purchased this package");
+                ResponseService::errorResponse("You already have applied for this package");
             }
 
             PaymentTransaction::create([
@@ -1771,7 +1774,7 @@ class ApiController extends Controller
                 'total_limit' => $package->item_limit == "unlimited" ? null : $package->item_limit,
                 'end_date'    => $package->duration == "unlimited" ? null : Carbon::now()->addDays($package->duration)
             ]);
-            ResponseService::successResponse("Package Purchased Successfully");
+            ResponseService::successResponse("Package Purchased Applied Successfully");
         } catch (Throwable $th) {
             ResponseService::logErrorResponse($th, "API Controller -> inAppPurchase");
             ResponseService::errorResponse();

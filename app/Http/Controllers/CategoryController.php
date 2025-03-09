@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Auth;
 use Throwable;
 use function compact;
 use function view;
+use Illuminate\Support\Facades\Log;
 
 class CategoryController extends Controller {
     private string $uploadFolder;
@@ -34,8 +35,7 @@ class CategoryController extends Controller {
     public function create(Request $request) {
         $languages = CachingService::getLanguages()->where('code', '!=', 'en')->values();
         ResponseService::noPermissionThenRedirect('category-create');
-        $categories = Category::with('subcategories')->get();
-        return view('category.create', compact('categories', 'languages'));
+        return view('category.create', compact('languages'));
     }
 
     public function store(Request $request) {
@@ -49,6 +49,7 @@ class CategoryController extends Controller {
             'status'             => 'required|boolean',
             'translations'       => 'nullable|array',
             'translations.*'     => 'nullable|string',
+            'type'               => 'required|in:service_experience,providers',
         ]);
 
         try {
@@ -80,17 +81,24 @@ class CategoryController extends Controller {
     }
 
 
-    public function show(Request $request, $id) {
+    public function show(Request $request, $category) {
         ResponseService::noPermissionThenSendJson('category-list');
         $offset = $request->input('offset', 0);
         $limit = $request->input('limit', 10);
         $sort = $request->input('sort', 'sequence');
         $order = $request->input('order', 'ASC');
-        $sql = Category::withCount('subcategories')->orderBy($sort, $order)->withCount('custom_fields')->with('subcategories');
-        if ($id == "0") {
+        $type = $request->input('type', 'service_experience');
+        
+        $sql = Category::withCount('subcategories')
+            ->orderBy($sort, $order)
+            ->withCount('custom_fields')
+            ->with('subcategories')
+            ->where('type', $type);
+            
+        if ($category == "0") {
             $sql->whereNull('parent_category_id');
         } else {
-            $sql->where('parent_category_id', $id);
+            $sql->where('parent_category_id', $category);
         }
         if (!empty($request->search)) {
             $sql = $sql->search($request->search);
@@ -105,13 +113,22 @@ class CategoryController extends Controller {
 
         foreach ($result as $key => $row) {
             $operate = '';
-            if (Auth::user()->can('category-update')) {
+            // Check if user has category-update permission
+            try {
+                ResponseService::noPermissionThenSendJson('category-update');
                 $operate .= BootstrapTableService::editButton(route('category.edit', $row->id));
+            } catch (\Exception $e) {
+                // User doesn't have permission, do nothing
             }
 
-            if (Auth::user()->can('category-edit')) {
+            // Check if user has category-delete permission
+            try {
+                ResponseService::noPermissionThenSendJson('category-delete');
                 $operate .= BootstrapTableService::deleteButton(route('category.destroy', $row->id));
+            } catch (\Exception $e) {
+                // User doesn't have permission, do nothing
             }
+            
             if ($row->subcategories_count > 1) {
                 $operate .= BootstrapTableService::button('fa fa-list-ol',route('sub.category.order.change', $row->id),['btn-secondary']);
             }
@@ -131,13 +148,10 @@ class CategoryController extends Controller {
         // Fetch translations for the category
         $translations = $category_data->translations->pluck('name', 'language_id')->toArray();
 
-        $parent_category_data = Category::find($category_data->parent_category_id);
-        $parent_category = $parent_category_data->name ?? '';
-
         // Fetch all languages
         $languages = CachingService::getLanguages()->where('code', '!=', 'en')->values();
 
-        return view('category.edit', compact('category_data', 'parent_category', 'translations', 'languages'));
+        return view('category.edit', compact('category_data', 'translations', 'languages'));
     }
 
     public function update(Request $request, $id) {
@@ -152,6 +166,7 @@ class CategoryController extends Controller {
                 'status'          => 'required|boolean',
                 'translations'    => 'nullable|array',
                 'translations.*'  => 'nullable|string',
+                'type'            => 'required|in:service_experience,providers',
             ]);
 
             $category = Category::find($id);
@@ -215,12 +230,22 @@ class CategoryController extends Controller {
             ->get()
             ->map(function ($subcategory) {
                 $operate = '';
-                if (Auth::user()->can('category-update')) {
+                // Check if user has category-update permission
+                try {
+                    ResponseService::noPermissionThenSendJson('category-update');
                     $operate .= BootstrapTableService::editButton(route('category.edit', $subcategory->id));
+                } catch (\Exception $e) {
+                    // User doesn't have permission, do nothing
                 }
-                if (Auth::user()->can('category-delete')) {
+
+                // Check if user has category-delete permission
+                try {
+                    ResponseService::noPermissionThenSendJson('category-delete');
                     $operate .= BootstrapTableService::deleteButton(route('category.destroy', $subcategory->id));
+                } catch (\Exception $e) {
+                    // User doesn't have permission, do nothing
                 }
+                
                 if ($subcategory->subcategories_count > 1) {
                     $operate .= BootstrapTableService::button('fa fa-list-ol',route('sub.category.order.change',$subcategory->id),['btn-secondary']);
                 }
@@ -318,6 +343,67 @@ class CategoryController extends Controller {
         } catch (Throwable $th) {
             ResponseService::logErrorRedirect($th);
             ResponseService::errorResponse('Something Went Wrong');
+        }
+    }
+
+    /**
+     * Get parent categories based on type
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getParentCategories(Request $request)
+    {
+        try {
+            $type = $request->input('type', 'service_experience');
+            
+            // Get all categories of the selected type
+            $categories = Category::where('type', $type)
+                ->orderBy('sequence')
+                ->get();
+            
+            // Build a hierarchical structure with level information
+            $result = [];
+            $this->buildCategoryHierarchy($categories, $result);
+            
+            return response()->json([
+                'success' => true,
+                'categories' => $result,
+                'count' => count($result),
+                'type' => $type
+            ]);
+        } catch (Throwable $th) {
+            Log::error("CategoryController -> getParentCategories: " . $th->getMessage() . ' --> ' . $th->getFile() . ' At Line : ' . $th->getLine());
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong: ' . $th->getMessage(),
+                'error' => $th->getMessage()
+            ]);
+        }
+    }
+    
+    /**
+     * Build a hierarchical structure of categories with level information
+     * 
+     * @param \Illuminate\Database\Eloquent\Collection $categories
+     * @param array $result
+     * @param int|null $parentId
+     * @param int $level
+     * @return void
+     */
+    private function buildCategoryHierarchy($categories, &$result, $parentId = null, $level = 0)
+    {
+        $filteredCategories = $categories->filter(function ($category) use ($parentId) {
+            return $category->parent_category_id == $parentId;
+        });
+        
+        foreach ($filteredCategories as $category) {
+            $categoryData = $category->toArray();
+            $categoryData['level'] = $level;
+            $result[] = $categoryData;
+            
+            // Process children
+            $this->buildCategoryHierarchy($categories, $result, $category->id, $level + 1);
         }
     }
 }

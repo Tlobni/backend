@@ -41,11 +41,22 @@
                                 </div>
 
                                 <div class="col-md-6">
+                                    <div class="col-md-12 form-group mandatory">
+                                        <label for="category_type" class="mandatory form-label">{{ __('Category Type') }}</label>
+                                        <select name="type" id="category_type" class="form-select form-control" data-parsley-required="true" onchange="loadParentCategories()">
+                                            <option value="">{{ __('Select Type') }}</option>
+                                            <option value="service_experience">{{ __('Service & Experience') }}</option>
+                                            <option value="providers">{{ __('Providers') }}</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6">
                                     <div class="col-md-12 form-group">
                                         <label for="p_category" class="form-label">{{ __('Parent Category') }}</label>
                                         <select name="parent_category_id" id="p_category" class="form-select form-control" data-placeholder="{{__("Select Category")}}">
                                             <option value="">{{__("Select a Category")}}</option>
-                                            @include('category.dropdowntree', ['categories' => $categories])
+                                            <!-- Parent categories will be loaded dynamically based on selected type -->
                                         </select>
                                     </div>
                                 </div>
@@ -91,5 +102,61 @@
         </div>
     </section>
 @endsection
+
+<script>
+    function loadParentCategories() {
+        const typeSelect = document.getElementById('category_type');
+        const parentCategorySelect = document.getElementById('p_category');
+        const selectedType = typeSelect.value;
+        
+        // Clear current options except the first one
+        while (parentCategorySelect.options.length > 1) {
+            parentCategorySelect.remove(1);
+        }
+        
+        // If no type is selected, return
+        if (!selectedType) {
+            console.log('No type selected');
+            return;
+        }
+        
+        console.log('Loading parent categories for type:', selectedType);
+        
+        // Use fetch API
+        fetch('{{ url("category/get-parent-categories") }}?type=' + selectedType)
+            .then(response => response.json())
+            .then(data => {
+                console.log('Response data:', data);
+                if (data.success) {
+                    // Add options for each parent category
+                    data.categories.forEach(function(category) {
+                        const option = document.createElement('option');
+                        option.value = category.id;
+                        option.textContent = category.name;
+                        
+                        // Add indentation based on level
+                        if (category.level > 0) {
+                            option.textContent = '- '.repeat(category.level) + option.textContent;
+                        }
+                        
+                        parentCategorySelect.appendChild(option);
+                    });
+                    
+                    if (data.categories.length === 0) {
+                        console.log('No parent categories found for type:', selectedType);
+                    }
+                } else {
+                    console.error('Error from server:', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading parent categories:', error);
+            });
+    }
+</script>
+
+@push('scripts')
+<!-- Keep this empty to avoid conflicts -->
+@endpush
 
 
