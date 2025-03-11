@@ -283,10 +283,10 @@ class ApiController extends Controller
 
             // Update user data
             DB::table('users')->where('id', $app_user->id)->update($data);
-            
+
             // Get updated user
             $updatedUser = User::find($app_user->id);
-            
+
             ResponseService::successResponse("Profile Updated Successfully", $updatedUser);
         } catch (Throwable $th) {
             ResponseService::logErrorResponse($th, 'API Controller -> updateProfile');
@@ -361,7 +361,7 @@ class ApiController extends Controller
                 'start_date'  => Carbon::now(),
                 'total_limit' => $package->item_limit == "unlimited" ? null : $package->item_limit,
                 'end_date'    => $package->duration == "unlimited" ? null : Carbon::now()->addDays($package->duration),
-                'status'      => 0 
+                'status'      => 0
             ]);
             ResponseService::successResponse('Package Purchased Applied. Waiting for admin approval.');
         } catch (Throwable $th) {
@@ -389,6 +389,17 @@ class ApiController extends Controller
             if ($user_package > 0) {
                 ResponseService::successResponse("User is allowed to create Item");
             }
+
+            // Check if user has pending packages
+            $pending_package = UserPurchasedPackage::where('user_id', Auth::user()->id)
+                ->where('status', 0) // Pending packages
+                ->whereHas('package', function ($q) use ($request) {
+                    $q->where('type', $request->package_type);
+                })->count();
+
+            if ($pending_package > 0) {
+                ResponseService::errorResponse("User is pending", $pending_package);
+            }
             ResponseService::errorResponse("User is not allowed to create Item", $user_package);
         } catch (Throwable $th) {
             ResponseService::logErrorResponse($th, "API Controller -> getLimits");
@@ -403,22 +414,21 @@ class ApiController extends Controller
                 'name'                 => 'required',
                 'category_id'          => 'required|integer',
                 'price'                => 'required',
-                'description'          => 'required',
-                'latitude'             => 'required',
-                'longitude'            => 'required',
-                'address'              => 'required',
-                'contact'              => 'numeric',
-                'show_only_to_premium' => 'required|boolean',
+                'description'          => 'nullable',
+                'address'              => 'nullable',
+                'contact'              => 'nullable|numeric',
+                'show_only_to_premium' => 'nullable|boolean',
                 'video_link'           => 'nullable|url',
                 'gallery_images'       => 'nullable|array|min:1',
                 'gallery_images.*'     => 'nullable|mimes:jpeg,png,jpg|max:6144',
-                'image'                => 'required|mimes:jpeg,png,jpg|max:6144',
-                'country'              => 'required',
+                'image'                => 'nullable|mimes:jpeg,png,jpg|max:6144',
+                'country'              => 'nullable',
                 'state'                => 'nullable',
-                'city'                 => 'required',
+                'city'                 => 'nullable',
                 'custom_field_files'   => 'nullable|array',
                 'custom_field_files.*' => 'nullable|mimes:jpeg,png,jpg,pdf,doc|max:6144',
                 'slug'                 => 'nullable|regex:/^[a-z0-9-]+$/',
+                'provider_item_type'   => 'nullable|in:service,experience',
             ]);
             if ($validator->fails()) {
                 ResponseService::validationError($validator->errors()->first());
@@ -426,6 +436,10 @@ class ApiController extends Controller
 
             DB::beginTransaction();
             $user = Auth::user();
+            
+            // Get the provider item type, default to 'service' if not provided
+            $providerItemType = $request->provider_item_type ?? 'service';
+            
             $user_package = UserPurchasedPackage::onlyActive()->whereHas('package', static function ($q) {
                 $q->where('type', 'item_listing');
             })->where('user_id', $user->id)->first();
@@ -449,16 +463,29 @@ class ApiController extends Controller
             }
             $uniqueSlug = HelperService::generateUniqueSlug(new Item(), $slug);
 
+            // Set default values for optional fields if not provided
             $data = [
-                ...$request->all(),
-                'name'        => $request->name,
-                'slug'        => $uniqueSlug,
-                'status'      => $status,
-                'active'      => "deactive",
-                'user_id'     => $user->id,
-                'package_id'  => $user_package->package_id ?? '',
-                'expiry_date' => $user_package->end_date ?? null
+                'name'                 => $request->name,
+                'slug'                 => $uniqueSlug,
+                'status'               => $status,
+                'active'               => "deactive",
+                'user_id'              => $user->id,
+                'package_id'           => $user_package->package_id ?? '',
+                'expiry_date'          => $user_package->end_date ?? null,
+                'category_id'          => $request->category_id,
+                'price'                => $request->price,
+                'description'          => $request->description ?? '',
+                'address'              => $request->address ?? '',
+                'contact'              => $request->contact ?? null,
+                'show_only_to_premium' => $request->show_only_to_premium ?? 0,
+                'video_link'           => $request->video_link ?? null,
+                'country'              => $request->country ?? '',
+                'state'                => $request->state ?? null,
+                'city'                 => $request->city ?? '',
+                'area_id'              => $request->area_id ?? null,
+                'provider_item_type'   => $providerItemType,
             ];
+            
             if ($request->hasFile('image')) {
                 $data['image'] = FileService::compressAndUpload($request->file('image'), $this->uploadFolder);
             }
@@ -1494,10 +1521,10 @@ class ApiController extends Controller
         }
         try {
             $item = Item::approved()->notOwner()->findOrFail($request->item_id);
-            
+
             // Set default amount to 0 if not provided
             $amount = $request->has('amount') ? $request->amount : 0;
-            
+
             $itemOffer = ItemOffer::updateOrCreate([
                 'item_id'   => $request->item_id,
                 'buyer_id'  => Auth::user()->id,
@@ -1522,7 +1549,7 @@ class ApiController extends Controller
             ];
             /* message_type is reserved keyword in FCM so removed here*/
             unset($fcmMsg['message_type']);
-            
+
             // Always send notification regardless of amount
             $user_token = UserFcmToken::where('user_id', $item->user->id)->pluck('fcm_token')->toArray();
             $message = 'New chat request from buyer';
