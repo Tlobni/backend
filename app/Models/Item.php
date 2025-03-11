@@ -18,6 +18,8 @@ class Item extends Model {
         'provider_item_type',
         'name',
         'price',
+        'price_type',
+        'special_tags',
         'description',
         'latitude',
         'longitude',
@@ -32,11 +34,14 @@ class Item extends Model {
         'country',
         'state',
         'city',
+        'location_type',
         'area_id',
         'all_category_ids',
         'slug',
         'sold_to',
         'expiry_date',
+        'expiration_date',
+        'expiration_time',
     ];
 
     // Relationships

@@ -429,6 +429,12 @@ class ApiController extends Controller
                 'custom_field_files.*' => 'nullable|mimes:jpeg,png,jpg,pdf,doc|max:6144',
                 'slug'                 => 'nullable|regex:/^[a-z0-9-]+$/',
                 'provider_item_type'   => 'nullable|in:service,experience',
+                'post_type'            => 'nullable|string',
+                'price_type'           => 'nullable|string',
+                'special_tags'         => 'nullable',
+                'location_type'        => 'nullable|string',
+                'expiration_date'      => 'nullable|date',
+                'expiration_time'      => 'nullable|string',
             ]);
             if ($validator->fails()) {
                 ResponseService::validationError($validator->errors()->first());
@@ -437,8 +443,11 @@ class ApiController extends Controller
             DB::beginTransaction();
             $user = Auth::user();
             
-            // Get the provider item type, default to 'service' if not provided
-            $providerItemType = $request->provider_item_type ?? 'service';
+            // Determine provider_item_type based on post_type parameter
+            $providerItemType = 'service'; // Default value
+            if ($request->post_type === 'PostType.experience') {
+                $providerItemType = 'experience';
+            }
             
             $user_package = UserPurchasedPackage::onlyActive()->whereHas('package', static function ($q) {
                 $q->where('type', 'item_listing');
@@ -463,6 +472,32 @@ class ApiController extends Controller
             }
             $uniqueSlug = HelperService::generateUniqueSlug(new Item(), $slug);
 
+            // Handle expiry date differently based on provider_item_type
+            $expiryDate = null;
+            if ($providerItemType === 'experience' && $request->expiration_date) {
+                // For experience type, use the provided expiration date and time
+                $expiryDate = $request->expiration_date;
+                
+                // If expiration_time is provided, combine it with the expiration_date
+                if ($request->expiration_time) {
+                    $dateTime = new \DateTime($expiryDate);
+                    list($hours, $minutes) = explode(':', $request->expiration_time);
+                    $dateTime->setTime((int)$hours, (int)$minutes);
+                    $expiryDate = $dateTime->format('Y-m-d H:i:s');
+                }
+            } else {
+                // For service type (default), use the package end date
+                $expiryDate = $user_package->end_date ?? null;
+            }
+
+            // Process special_tags if provided
+            $specialTags = null;
+            if ($request->special_tags) {
+                $specialTags = is_array($request->special_tags) 
+                    ? json_encode($request->special_tags) 
+                    : $request->special_tags;
+            }
+
             // Set default values for optional fields if not provided
             $data = [
                 'name'                 => $request->name,
@@ -471,9 +506,11 @@ class ApiController extends Controller
                 'active'               => "deactive",
                 'user_id'              => $user->id,
                 'package_id'           => $user_package->package_id ?? '',
-                'expiry_date'          => $user_package->end_date ?? null,
+                'expiry_date'          => $expiryDate,
                 'category_id'          => $request->category_id,
                 'price'                => $request->price,
+                'price_type'           => $request->price_type ?? null,
+                'special_tags'         => $specialTags,
                 'description'          => $request->description ?? '',
                 'address'              => $request->address ?? '',
                 'contact'              => $request->contact ?? null,
@@ -482,8 +519,11 @@ class ApiController extends Controller
                 'country'              => $request->country ?? '',
                 'state'                => $request->state ?? null,
                 'city'                 => $request->city ?? '',
+                'location_type'        => $request->location_type ?? null,
                 'area_id'              => $request->area_id ?? null,
                 'provider_item_type'   => $providerItemType,
+                'expiration_date'      => $request->expiration_date ?? null,
+                'expiration_time'      => $request->expiration_time ?? null,
             ];
             
             if ($request->hasFile('image')) {
@@ -1235,7 +1275,7 @@ class ApiController extends Controller
             }
             $favouriteItemIDS = Favourite::where('user_id', Auth::user()->id)->select('item_id')->pluck('item_id');
             $items = Item::whereIn('id', $favouriteItemIDS)
-                ->with('user:id,name,email,mobile,profile,country_code', 'category:id,name,image', 'gallery_images:id,image,item_id', 'featured_items', 'favourites', 'item_custom_field_values.custom_field')->where('status', '<>', 'sold out')->paginate();
+                ->with('user:id,name,email,mobile,profile,is_verified,show_personal_details,country_code', 'category:id,name,image', 'gallery_images:id,image,item_id', 'featured_items', 'favourites', 'item_custom_field_values.custom_field')->where('status', '<>', 'sold out')->paginate();
 
             ResponseService::successResponse("Data Fetched Successfully", new ItemCollection($items));
         } catch (Throwable $th) {

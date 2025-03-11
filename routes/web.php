@@ -410,5 +410,5 @@ Route::get('experience-items/data', [ItemController::class, 'experienceItemsData
 
 // Keep your existing item routes
 Route::get('item/{id}', [ItemController::class, 'showItem'])->name('item.show');
-Route::post('item/approval/{id}', [ItemController::class, 'updateItemApproval'])->name('item.approval');
+// Route::post('item/approval/{id}', [ItemController::class, 'updateItemApproval'])->name('item.approval');
 Route::delete('item/{id}', [ItemController::class, 'destroy'])->name('item.destroy');
