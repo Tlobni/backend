@@ -1,6 +1,10 @@
 @extends('layouts.main')
 @section('title')
-    {{__("Edit Categories")}}
+    @if($category_data->type == 'providers')
+        {{__("Edit Provider Category")}}
+    @else
+        {{__("Edit Service & Experience Category")}}
+    @endif
 @endsection
 
 @section('page-title')
@@ -16,16 +20,27 @@
 @section('content')
     <section class="section">
         <div class="buttons">
-            <a class="btn btn-primary" href="{{ route('category.index') }}">< {{__("Back to All Categories")}} </a>
+            @if($category_data->type == 'providers')
+                <a class="btn btn-primary" href="{{ route('category.index', ['type' => 'providers']) }}">< {{__("Back to Provider Categories")}} </a>
+            @else
+                <a class="btn btn-primary" href="{{ route('category.index', ['type' => 'service_experience']) }}">< {{__("Back to Service & Experience Categories")}} </a>
+            @endif
         </div>
         <div class="row">
             <form action="{{ route('category.update', $category_data->id) }}" method="POST" data-parsley-validate enctype="multipart/form-data">
                 @method('PUT')
                 @csrf
                 <input type="hidden" name="edit_data" value={{ $category_data->id }}>
+                <input type="hidden" name="type" value="{{ $category_data->type }}">
                 <div class="col-md-12">
                     <div class="card">
-                        <div class="card-header">{{__("Edit Categories")}}</div>
+                        <div class="card-header">
+                            @if($category_data->type == 'providers')
+                                {{__("Edit Provider Category")}}
+                            @else
+                                {{__("Edit Service & Experience Category")}}
+                            @endif
+                        </div>
                         <div class="card-body mt-3">
                             <div class="row">
                                 <div class="col-md-6">
@@ -35,20 +50,17 @@
                                     </div>
                                 </div>
                                 <div class="col-md-6">
-                                    <div class="col-md-12 form-group mandatory">
-                                        <label for="category_type" class="mandatory form-label">{{ __('Category Type') }}</label>
-                                        <select name="type" id="category_type" class="form-select form-control" data-parsley-required="true" onchange="loadParentCategories()">
-                                            <option value="service_experience" {{ $category_data->type == 'service_experience' ? 'selected' : '' }}>{{ __('Service & Experience') }}</option>
-                                            <option value="providers" {{ $category_data->type == 'providers' ? 'selected' : '' }}>{{ __('Providers') }}</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div class="col-md-6">
                                     <div class="col-md-12 form-group">
                                         <label for="p_category" class="form-label">{{ __('Parent Category') }}</label>
                                         <select name="parent_category_id" id="p_category" class="form-select form-control" data-placeholder="{{__("Select Category")}}">
                                             <option value="">{{__("Select a Category")}}</option>
+                                            @if(!empty($parentCategories))
+                                                @foreach($parentCategories as $category)
+                                                    <option value="{{ $category['id'] }}" {{ $category_data->parent_category_id == $category['id'] ? 'selected' : '' }}>
+                                                        {{ str_repeat('- ', $category['level']) . $category['name'] }}
+                                                    </option>
+                                                @endforeach
+                                            @endif
                                         </select>
                                     </div>
                                 </div>
@@ -113,73 +125,36 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <script>
-    // Load parent categories when the page loads
     document.addEventListener('DOMContentLoaded', function() {
-        loadParentCategories({{ $category_data->parent_category_id ?? 'null' }});
-    });
-    
-    function loadParentCategories(selectedParentId = null) {
-        const typeSelect = document.getElementById('category_type');
-        const parentCategorySelect = document.getElementById('p_category');
-        const selectedType = typeSelect.value;
-        const currentCategoryId = {{ $category_data->id }};
+        // Initialize image upload handling
+        const imgInput = document.querySelector('.img_input');
+        const fileInput = document.querySelector('input[type="file"].image');
+        const previewImage = document.querySelector('.preview-image');
         
-        // Clear current options except the first one
-        while (parentCategorySelect.options.length > 1) {
-            parentCategorySelect.remove(1);
-        }
-        
-        // If no type is selected, return
-        if (!selectedType) {
-            console.log('No type selected');
-            return;
-        }
-        
-        console.log('Loading parent categories for type:', selectedType);
-        console.log('Current category ID:', currentCategoryId);
-        console.log('Selected parent ID:', selectedParentId);
-        
-        // Use fetch API
-        fetch('{{ url("category/get-parent-categories") }}?type=' + selectedType)
-            .then(response => response.json())
-            .then(data => {
-                console.log('Response data:', data);
-                if (data.success) {
-                    // Add options for each parent category
-                    data.categories.forEach(function(category) {
-                        // Skip the current category to prevent self-reference
-                        if (category.id == currentCategoryId) {
-                            console.log('Skipping current category:', category.name);
-                            return;
-                        }
-                        
-                        const option = document.createElement('option');
-                        option.value = category.id;
-                        option.textContent = category.name;
-                        
-                        // Add indentation based on level
-                        if (category.level > 0) {
-                            option.textContent = '- '.repeat(category.level) + option.textContent;
-                        }
-                        
-                        // Select the parent category if it matches
-                        if (selectedParentId && category.id == selectedParentId) {
-                            option.selected = true;
-                            console.log('Selected parent category:', category.name);
-                        }
-                        
-                        parentCategorySelect.appendChild(option);
-                    });
-                    
-                    if (data.categories.length === 0) {
-                        console.log('No parent categories found for type:', selectedType);
-                    }
-                } else {
-                    console.error('Error from server:', data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Error loading parent categories:', error);
+        if (imgInput && fileInput && previewImage) {
+            imgInput.addEventListener('click', function() {
+                fileInput.click();
             });
-    }
+            
+            fileInput.addEventListener('change', function() {
+                if (fileInput.files && fileInput.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        previewImage.src = e.target.result;
+                    };
+                    reader.readAsDataURL(fileInput.files[0]);
+                }
+            });
+        }
+        
+        // Handle status toggle
+        const statusCheckbox = document.querySelector('.status-switch');
+        const statusInput = document.getElementById('status');
+        
+        if (statusCheckbox && statusInput) {
+            statusCheckbox.addEventListener('change', function() {
+                statusInput.value = this.checked ? '1' : '0';
+            });
+        }
+    });
 </script>

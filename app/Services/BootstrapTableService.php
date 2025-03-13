@@ -110,6 +110,25 @@ class BootstrapTableService {
     }
 
     /**
+     * Creates a delete button that uses AJAX for deletion instead of a form submission
+     * 
+     * @param $url
+     * @param $id
+     * @param $customClass
+     * @return string
+     */
+    public static function ajaxDeleteButton($url, $id = null, $customClass = null) {
+        $customClass = ["delete-btn", "btn-danger" . $customClass];
+        $customAttributes = [
+            "title" => trans("Delete"),
+            "id"    => "delete-" . $id,
+            "data-id" => $id
+        ];
+        $iconClass = "fas fa-trash";
+        return self::button($iconClass, $url, $customClass, $customAttributes);
+    }
+
+    /**
      * @param $url
      * @param string $title
      * @return string

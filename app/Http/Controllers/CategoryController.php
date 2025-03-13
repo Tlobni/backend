@@ -27,22 +27,64 @@ class CategoryController extends Controller {
         $this->uploadFolder = "category";
     }
 
-    public function index() {
+    public function index(Request $request) {
         ResponseService::noAnyPermissionThenRedirect(['category-list', 'category-create', 'category-update', 'category-delete']);
-        return view('category.index');
+        $type = $request->input('type', 'service_experience');
+        
+        // Redirect to the appropriate type-specific page
+        if ($type == 'providers') {
+            return redirect()->route('category.providers');
+        } else {
+            return redirect()->route('category.service.experience');
+        }
+    }
+
+    /**
+     * Display Service & Experience Categories
+     */
+    public function serviceExperienceCategories() {
+        ResponseService::noAnyPermissionThenRedirect(['category-list', 'category-create', 'category-update', 'category-delete']);
+        return view('category.service_experience_categories');
+    }
+    
+    /**
+     * Display Provider Categories
+     */
+    public function providerCategories() {
+        ResponseService::noAnyPermissionThenRedirect(['category-list', 'category-create', 'category-update', 'category-delete']);
+        return view('category.provider_categories');
     }
 
     public function create(Request $request) {
-        $languages = CachingService::getLanguages()->where('code', '!=', 'en')->values();
         ResponseService::noPermissionThenRedirect('category-create');
-        return view('category.create', compact('languages'));
+        $languages = CachingService::getLanguages()->where('code', '!=', 'en')->values();
+        $type = $request->input('type', 'service_experience');
+        
+        // Load initial parent categories
+        $parentCategories = [];
+        try {
+            // Get all categories of the selected type
+            $categories = Category::where('type', $type)
+                ->orderBy('sequence')
+                ->get();
+            
+            // Build a hierarchical structure with level information
+            $result = [];
+            $this->buildCategoryHierarchy($categories, $result);
+            $parentCategories = $result;
+            
+        } catch (Throwable $th) {
+            Log::error("Error loading parent categories: " . $th->getMessage());
+        }
+        
+        return view('category.create', compact('languages', 'type', 'parentCategories'));
     }
 
     public function store(Request $request) {
         ResponseService::noPermissionThenSendJson('category-create');
         $request->validate([
             'name'               => 'required',
-            'image'              => 'required|mimes:jpg,jpeg,png|max:6144',
+            'image'              => 'nullable|mimes:jpg,jpeg,png|max:6144',
             'parent_category_id' => 'nullable|integer',
             'description'        => 'nullable',
             'slug'               => 'required',
@@ -82,6 +124,13 @@ class CategoryController extends Controller {
 
 
     public function show(Request $request, $category) {
+        // For debugging
+        Log::info('Category show method called', [
+            'category' => $category,
+            'type' => $request->input('type'),
+            'all_params' => $request->all()
+        ]);
+        
         ResponseService::noPermissionThenSendJson('category-list');
         $offset = $request->input('offset', 0);
         $limit = $request->input('limit', 10);
@@ -106,6 +155,15 @@ class CategoryController extends Controller {
         $total = $sql->count();
         $sql->skip($offset)->take($limit);
         $result = $sql->get();
+        
+        // For debugging
+        Log::info('Category query results', [
+            'sql' => $sql->toSql(),
+            'bindings' => $sql->getBindings(),
+            'count' => $total,
+            'result_count' => $result->count()
+        ]);
+        
         $bulkData = array();
         $bulkData['total'] = $total;
         $rows = array();
@@ -124,7 +182,7 @@ class CategoryController extends Controller {
             // Check if user has category-delete permission
             try {
                 ResponseService::noPermissionThenSendJson('category-delete');
-                $operate .= BootstrapTableService::deleteButton(route('category.destroy', $row->id));
+                $operate .= BootstrapTableService::ajaxDeleteButton(route('category.destroy', $row->id), $row->id);
             } catch (\Exception $e) {
                 // User doesn't have permission, do nothing
             }
@@ -147,56 +205,77 @@ class CategoryController extends Controller {
         $category_data = Category::findOrFail($id);
         // Fetch translations for the category
         $translations = $category_data->translations->pluck('name', 'language_id')->toArray();
-
-        // Fetch all languages
         $languages = CachingService::getLanguages()->where('code', '!=', 'en')->values();
-
-        return view('category.edit', compact('category_data', 'translations', 'languages'));
+        
+        // Load parent categories
+        $parentCategories = [];
+        try {
+            // Get all categories of the selected type
+            $categories = Category::where('type', $category_data->type)
+                ->where('id', '!=', $id) // Exclude current category to prevent self-reference
+                ->orderBy('sequence')
+                ->get();
+            
+            // Build a hierarchical structure with level information
+            $result = [];
+            $this->buildCategoryHierarchy($categories, $result);
+            $parentCategories = $result;
+            
+        } catch (Throwable $th) {
+            Log::error("Error loading parent categories: " . $th->getMessage());
+        }
+        
+        return view('category.edit', compact('category_data', 'languages', 'translations', 'parentCategories'));
     }
 
     public function update(Request $request, $id) {
-        ResponseService::noPermissionThenSendJson('category-update');
+        ResponseService::noPermissionThenRedirect('category-update');
+        
+        $request->validate([
+            'name'               => 'required',
+            'image'              => 'nullable|mimes:jpg,jpeg,png|max:6144',
+            'parent_category_id' => 'nullable|integer',
+            'description'        => 'nullable',
+            'slug'               => 'required',
+            'status'             => 'required|boolean',
+            'translations'       => 'nullable|array',
+            'translations.*'     => 'nullable|string',
+        ]);
+
         try {
-            $request->validate([
-                'name'            => 'nullable',
-                'image'           => 'nullable|mimes:jpg,jpeg,png|max:6144',
-                'parent_category' => 'nullable|integer',
-                'description'     => 'nullable',
-                'slug'            => 'nullable',
-                'status'          => 'required|boolean',
-                'translations'    => 'nullable|array',
-                'translations.*'  => 'nullable|string',
-                'type'            => 'required|in:service_experience,providers',
-            ]);
-
             $category = Category::find($id);
-
+            
             $data = $request->all();
+            $data['slug'] = HelperService::generateUniqueSlug(new Category(), $request->slug, $id);
+            
             if ($request->hasFile('image')) {
-                $data['image'] = FileService::compressAndReplace($request->file('image'), $this->uploadFolder, $category->getRawOriginal('image'));
+                if ($category->image && file_exists(public_path('uploads/' . $category->image))) {
+                    @unlink(public_path('uploads/' . $category->image));
+                }
+                
+                $data['image'] = FileService::compressAndUpload($request->file('image'), $this->uploadFolder);
             }
-            $data['slug'] = HelperService::generateUniqueSlug(new Category(), $request->slug, $category->id);
+            
             $category->update($data);
-
+            
+            CategoryTranslation::where(['category_id' => $id])->delete();
+            
             if (!empty($request->translations)) {
-                $categoryTranslations = [];
                 foreach ($request->translations as $key => $value) {
-                    $categoryTranslations[] = [
-                        'category_id' => $category->id,
-                        'language_id' => $key,
-                        'name'        => $value,
-                    ];
-                }
-
-                if (count($categoryTranslations) > 0) {
-                    CategoryTranslation::upsert($categoryTranslations, ['category_id', 'language_id'], ['name']);
+                    if (!empty($value)) {
+                        $category->translations()->create([
+                            'name'        => $value,
+                            'language_id' => $key,
+                        ]);
+                    }
                 }
             }
-
-            ResponseService::successRedirectResponse("Category Updated Successfully", route('category.index'));
-        } catch (Throwable $th) {
-            ResponseService::logErrorRedirect($th);
-            ResponseService::errorRedirectResponse('Something Went Wrong');
+            
+            ResponseService::successRedirectResponse("Category Updated Successfully", route('category.index', ['type' => $category->type]));
+        } catch (QueryException $e) {
+            ResponseService::errorRedirectResponse("Unable to update, there is an issue with database operation");
+        } catch (Throwable $e) {
+            ResponseService::errorRedirectResponse($e->getMessage());
         }
     }
 
@@ -204,18 +283,44 @@ class CategoryController extends Controller {
         ResponseService::noPermissionThenSendJson('category-delete');
         try {
             $category = Category::find($id);
+            if (!$category) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Category not found'
+                ]);
+            }
+            
             if ($category->items_count > 0) {
-                ResponseService::errorResponse('Cannot delete category. It has associated items.');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot delete category. It has associated items.'
+                ]);
             }
+            
             if ($category->delete()) {
-                ResponseService::successResponse('Category delete successfully');
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Category deleted successfully'
+                ]);
             }
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete category'
+            ]);
+            
         } catch (QueryException $th) {
-            ResponseService::logErrorResponse($th, 'Failed to delete category', 'Cannot delete category. Remove associated subcategories and custom fields first.');
-            ResponseService::errorResponse('Something Went Wrong');
+            Log::error("CategoryController -> delete: " . $th->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot delete category. Remove associated subcategories and custom fields first.'
+            ]);
         } catch (Throwable $th) {
-            ResponseService::logErrorResponse($th, "CategoryController -> delete");
-            ResponseService::errorResponse('Something Went Wrong');
+            Log::error("CategoryController -> delete: " . $th->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong: ' . $th->getMessage()
+            ]);
         }
     }
 
@@ -315,8 +420,9 @@ class CategoryController extends Controller {
     }
 
     public function categoriesReOrder(Request $request) {
-        $categories = Category::whereNull('parent_category_id')->orderBy('sequence')->get();
-        return view('category.categories-order', compact('categories'));
+        ResponseService::noPermissionThenRedirect('category-update');
+        $type = $request->input('type', 'service_experience');
+        return view('category.categories-order', compact('type'));
     }
 
     public function subCategoriesReOrder(Request $request ,$id) {
@@ -325,24 +431,26 @@ class CategoryController extends Controller {
     }
 
     public function updateOrder(Request $request) {
-        $request->validate([
-           'order' => 'required|json'
-        ]);
+        ResponseService::noPermissionThenSendJson('category-update');
+        $ids = $request->input('ids');
+        $type = $request->input('type', 'service_experience');
+        
         try {
-
-            $order = json_decode($request->input('order'), true);
-            $data = [];
-        foreach ($order as $index => $id) {
-            $data[] = [
-                'id' => $id,
-                'sequence' => $index + 1,
-            ];
-        }
-        Category::upsert($data, ['id'], ['sequence']);
-        ResponseService::successResponse("Order Updated Successfully");
-        } catch (Throwable $th) {
-            ResponseService::logErrorRedirect($th);
-            ResponseService::errorResponse('Something Went Wrong');
+            if (!empty($ids)) {
+                for ($i = 0; $i < count($ids); $i++) {
+                    Category::where(['id' => $ids[$i], 'type' => $type])->update(['sequence' => $i + 1]);
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Order updated successfully',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update order: ' . $e->getMessage(),
+            ]);
         }
     }
 

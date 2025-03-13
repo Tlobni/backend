@@ -34,7 +34,7 @@
                                         data-escape="true"
                                         data-pagination-successively-size="3" data-query-params="queryParamsExpert" data-table="users" data-status-column="deleted_at"
                                         data-show-export="true" data-export-options='{"fileName": "expert-list","ignoreColumn": ["operate"]}' data-export-types="['pdf','json', 'xml', 'csv', 'txt', 'sql', 'doc', 'excel']"
-                                        data-url="{{ url('customer/show') }}"
+                                        data-url="{{ route('customer.list-by-role') }}"
                                         data-mobile-responsive="true">
                                      <thead class="thead-dark">
                                      <tr>
@@ -64,6 +64,81 @@
             </div>
         </div>
     </section>
+
+    <!-- Assign Package Modal -->
+    <div id="assignPackageModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel1"
+         aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="myModalLabel1">{{ __('Assign Packages') }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="resetModal()"></button>
+                </div>
+                <div class="modal-body">
+                    <form class="create-form" action="{{ route('customer.assign.package') }}" method="POST" data-parsley-validate data-success-function="assignApprovalSuccess">
+                        @csrf
+                        <input type="hidden" name="user_id" id='user_id'>
+                        <div id="currency-settings" data-symbol="{{ $currency_symbol ?? '' }}" data-position="{{ $currency_symbol_position ?? '' }}" data-free-ad-listing="{{ $free_ad_listing ?? 0 }}"></div>
+                        @if(($free_ad_listing ?? 0) != 1)
+                        <div class="form-group row select-package">
+                            <div class="col-md-6">
+                                <input type="radio" id="item_package" class="package_type form-check-input" name="package_type" value="item_listing" required>
+                                <label for="item_package">{{ __('Item Listing Package') }}</label>
+                            </div>
+                            <div class="col-md-6">
+                                <input type="radio" id="advertisement_package" class="package_type form-check-input" name="package_type" value="advertisement" required>
+                                <label for="advertisement_package">{{ __('Advertisement Package') }}</label>
+                            </div>
+                        </div>
+                        @endif
+                        <div class="row mt-3" id="item-listing-package-div" style="display: none;">
+                            <div class="form-group col-md-12">
+                                <label for="package">{{__("Select Item Listing Package")}}</label>
+                                <select name="package_id" class="form-select package" id="item-listing-package" aria-label="Package">
+                                    <option value="" disabled selected>Select Option</option>
+                                    @foreach($itemListingPackage ?? [] as $package)
+                                        <option value="{{$package->id}}" data-details="{{json_encode($package)}}">{{$package->name}}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mt-3" id="advertisement-package-div" style="{{ ($free_ad_listing ?? 0) == '1' ? 'display: block;' : 'display: none;' }}">
+                            <div class="form-group col-md-12">
+                                <label for="package">{{__("Select Advertisement Package")}}</label>
+                                <select name="package_id" class="form-select package" id="advertisement-package" aria-label="Package">
+                                    <option value="" disabled selected>Select Option</option>
+                                    @foreach($advertisementPackage ?? [] as $package)
+                                        <option value="{{$package->id}}" data-details="{{json_encode($package)}}">{{$package->name}}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                        <div id="package_details" class="mt-3" style="display: none;">
+                            <p><strong>Name:</strong> <span id="package_name"></span></p>
+                            <p><strong>Price:</strong> <span id="package_price"></span></p>
+                            <p><strong>Final Price:</strong> <span id="package_final_price"></span></p>
+                            <p><strong>Limitation:</strong> <span id="package_duration"></span></p>
+                        </div>
+                        <div class="form-group row payment" style="display: none">
+                            <div class="col-md-6">
+                                <input type="radio" id="cash_payment" class="payment_gateway form-check-input" name="payment_gateway" value="cash" required>
+                                <label for="cash_payment">{{ __('Cash') }}</label>
+                            </div>
+                            <div class="col-md-6">
+                                <input type="radio" id="cheque_payment" class="payment_gateway form-check-input" name="payment_gateway" value="cheque" required>
+                                <label for="cheque_payment">{{ __('Cheque') }}</label>
+                            </div>
+                        </div>
+                        <div class="form-group cheque mt-3" style="display: none">
+                            <label for="cheque">{{ __('Add cheque number') }}</label>
+                            <input type="text" id="cheque" class="form-control" name="cheque_number" data-parsley-required="true">
+                        </div>
+                        <input type="submit" value="{{__("Save")}}" class="btn btn-primary mt-3">
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @section('js')
@@ -75,7 +150,7 @@
             order: p.order,
             offset: p.offset,
             search: p.search,
-            role: 'Expert'
+            role: 'expert'
         };
     }
     
@@ -147,7 +222,7 @@
             let status = $(this).prop('checked') ? 1 : 0;
             
             $.ajax({
-                url: "{{ url('customer/update') }}",
+                url: "{{ route('customer.toggle.status') }}",
                 type: 'POST',
                 data: {
                     "_token": "{{ csrf_token() }}",
@@ -160,6 +235,84 @@
                     }
                 }
             });
+        });
+        
+        // Assign Package Modal functionality
+        function assignApprovalSuccess() {
+            $('#assignPackageModal').modal('hide');
+        }
+        
+        function resetModal() {
+            const modal = $('#assignPackageModal');
+            const form = modal.find('form');
+            form[0].reset();
+        }
+        
+        // Handle assign package button click
+        $(document).on('click', '.assign_package', function(e) {
+            const userId = $(this).closest('td').data('id') || $(this).data('id');
+            $('#user_id').val(userId);
+        });
+        
+        // Handle package type selection
+        $('.package_type').on('change', function() {
+            const packageType = $(this).val();
+            
+            if (packageType === 'item_listing') {
+                $('#item-listing-package-div').show();
+                $('#advertisement-package-div').hide();
+                $('#advertisement-package').prop('disabled', true);
+                $('#item-listing-package').prop('disabled', false);
+            } else if (packageType === 'advertisement') {
+                $('#item-listing-package-div').hide();
+                $('#advertisement-package-div').show();
+                $('#item-listing-package').prop('disabled', true);
+                $('#advertisement-package').prop('disabled', false);
+            }
+            
+            // Reset package details
+            $('#package_details').hide();
+            $('.payment').hide();
+            $('.cheque').hide();
+        });
+        
+        // Handle package selection
+        $('.package').on('change', function() {
+            const selectedOption = $(this).find('option:selected');
+            const packageDetails = selectedOption.data('details');
+            
+            if (packageDetails) {
+                const currencySymbol = $('#currency-settings').data('symbol');
+                const currencyPosition = $('#currency-settings').data('position');
+                
+                $('#package_name').text(packageDetails.name);
+                
+                const priceFormatted = currencyPosition === 'left' 
+                    ? currencySymbol + packageDetails.price
+                    : packageDetails.price + currencySymbol;
+                
+                const finalPriceFormatted = currencyPosition === 'left'
+                    ? currencySymbol + packageDetails.final_price
+                    : packageDetails.final_price + currencySymbol;
+                
+                $('#package_price').text(priceFormatted);
+                $('#package_final_price').text(finalPriceFormatted);
+                $('#package_duration').text(packageDetails.duration + ' days');
+                
+                $('#package_details').show();
+                $('.payment').show();
+            }
+        });
+        
+        // Handle payment method selection
+        $('.payment_gateway').on('change', function() {
+            const paymentMethod = $(this).val();
+            
+            if (paymentMethod === 'cheque') {
+                $('.cheque').show();
+            } else {
+                $('.cheque').hide();
+            }
         });
     });
 </script>

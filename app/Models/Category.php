@@ -39,7 +39,7 @@ class Category extends Model {
         if (!empty($image)) {
             return url(Storage::url($image));
         }
-        return $image;
+        return asset('assets/img_placeholder.jpeg');
     }
 
     public function items() {

@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Throwable;
+use App\Models\Category;
 
 class CustomersController extends Controller {
     public function index() {
@@ -118,6 +119,20 @@ class CustomersController extends Controller {
                     "data-bs-toggle" => "modal"
                 ]
             );
+            
+            // Add edit and delete buttons for clients
+            if ($role === 'Client') {
+                $tempRow['operate'] .= BootstrapTableService::editButton('javascript:void(0)', false, '', 'edit-user');
+                $tempRow['operate'] .= BootstrapTableService::button(
+                    'fas fa-trash',
+                    'javascript:void(0)',
+                    ['btn-danger', 'delete-user'],
+                    [
+                        'title' => trans('Delete'),
+                        'data-id' => $row->id
+                    ]
+                );
+            }
             $rows[] = $tempRow;
         }
 
@@ -199,7 +214,7 @@ class CustomersController extends Controller {
                 // Expert-specific fields
                 $tempRow['gender'] = ''; // Not in database
                 $tempRow['location'] = $row->address ?? '';
-                $tempRow['categories'] = '';
+                $tempRow['categories'] = $row->categories ?? '';
                 $tempRow['expertise'] = ''; // Not in database
                 $tempRow['experience'] = ''; // Not in database
                 $tempRow['services_count'] = isset($row->items) ? count($row->items) : 0;
@@ -207,8 +222,9 @@ class CustomersController extends Controller {
             } elseif ($role === 'Business') {
                 // Business-specific fields
                 $tempRow['business_name'] = $row->name;
-                $tempRow['location'] = $row->address ?? '';
-                $tempRow['categories'] = '';
+                $tempRow['location'] = $row->location ?? '';
+                $tempRow['categories'] = $row->categories ?? '';
+                $tempRow['phone'] = $row->phone ?? '';
                 $tempRow['services_count'] = isset($row->items) ? count($row->items) : 0;
                 $tempRow['has_subscription'] = false; // Default to false since we can't check
             } elseif ($role === 'Client') {
@@ -239,6 +255,20 @@ class CustomersController extends Controller {
                     "data-bs-toggle" => "modal"
                 ]
             );
+            
+            // Add edit and delete buttons for clients
+            if ($role === 'Client') {
+                $tempRow['operate'] .= BootstrapTableService::editButton('javascript:void(0)', false, '', 'edit-user');
+                $tempRow['operate'] .= BootstrapTableService::button(
+                    'fas fa-trash',
+                    'javascript:void(0)',
+                    ['btn-danger', 'delete-user'],
+                    [
+                        'title' => trans('Delete'),
+                        'data-id' => $row->id
+                    ]
+                );
+            }
             $rows[] = $tempRow;
         }
 
@@ -306,7 +336,28 @@ class CustomersController extends Controller {
     public function clients()
     {
         ResponseService::noPermissionThenRedirect('customer-list');
-        return view('customer.clients');
+        
+        // Get package-related data
+        $packages = Package::all()->where('status', 1);
+        $settings = Setting::whereIn('name', ['currency_symbol', 'currency_symbol_position','free_ad_listing'])
+            ->pluck('value', 'name');
+        $currency_symbol = $settings['currency_symbol'] ?? '';
+        $currency_symbol_position = $settings['currency_symbol_position'] ?? '';
+        $free_ad_listing = $settings['free_ad_listing'] ?? '';
+        $itemListingPackage = $packages->filter(function ($data) {
+            return $data->type == "item_listing";
+        });
+        $advertisementPackage = $packages->filter(function ($data) {
+            return $data->type == "advertisement";
+        });
+        
+        return view('customer.clients', compact(
+            'itemListingPackage', 
+            'advertisementPackage',
+            'currency_symbol',
+            'currency_symbol_position',
+            'free_ad_listing'
+        ));
     }
 
     /**
@@ -317,7 +368,28 @@ class CustomersController extends Controller {
     public function business()
     {
         ResponseService::noPermissionThenRedirect('customer-list');
-        return view('customer.business');
+        
+        // Get package-related data
+        $packages = Package::all()->where('status', 1);
+        $settings = Setting::whereIn('name', ['currency_symbol', 'currency_symbol_position','free_ad_listing'])
+            ->pluck('value', 'name');
+        $currency_symbol = $settings['currency_symbol'] ?? '';
+        $currency_symbol_position = $settings['currency_symbol_position'] ?? '';
+        $free_ad_listing = $settings['free_ad_listing'] ?? '';
+        $itemListingPackage = $packages->filter(function ($data) {
+            return $data->type == "item_listing";
+        });
+        $advertisementPackage = $packages->filter(function ($data) {
+            return $data->type == "advertisement";
+        });
+        
+        return view('customer.business', compact(
+            'itemListingPackage', 
+            'advertisementPackage',
+            'currency_symbol',
+            'currency_symbol_position',
+            'free_ad_listing'
+        ));
     }
 
     /**
@@ -328,6 +400,144 @@ class CustomersController extends Controller {
     public function experts()
     {
         ResponseService::noPermissionThenRedirect('customer-list');
-        return view('customer.experts');
+        
+        // Get package-related data
+        $packages = Package::all()->where('status', 1);
+        $settings = Setting::whereIn('name', ['currency_symbol', 'currency_symbol_position','free_ad_listing'])
+            ->pluck('value', 'name');
+        $currency_symbol = $settings['currency_symbol'] ?? '';
+        $currency_symbol_position = $settings['currency_symbol_position'] ?? '';
+        $free_ad_listing = $settings['free_ad_listing'] ?? '';
+        $itemListingPackage = $packages->filter(function ($data) {
+            return $data->type == "item_listing";
+        });
+        $advertisementPackage = $packages->filter(function ($data) {
+            return $data->type == "advertisement";
+        });
+        
+        return view('customer.experts', compact(
+            'itemListingPackage', 
+            'advertisementPackage',
+            'currency_symbol',
+            'currency_symbol_position',
+            'free_ad_listing'
+        ));
+    }
+
+    /**
+     * Update client information
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateClient(Request $request)
+    {
+        try {
+            ResponseService::noPermissionThenSendJson('customer-update');
+            
+            $validator = Validator::make($request->all(), [
+                'id' => 'required|exists:users,id',
+                'name' => 'required|string|max:255',
+                'email' => 'required|email|max:255|unique:users,email,'.$request->id,
+                'mobile' => 'nullable|string|max:20',
+                'gender' => 'nullable|string|in:male,female,other',
+                'address' => 'nullable|string|max:255',
+            ]);
+            
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => true,
+                    'message' => $validator->errors()->first(),
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+            
+            $user = User::findOrFail($request->id);
+            
+            // Ensure user has Client role
+            if (!$user->hasRole('Client')) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'User is not a client'
+                ], 422);
+            }
+            
+            $user->update([
+                'name' => $request->name,
+                'email' => $request->email,
+                'mobile' => $request->mobile,
+                'gender' => $request->gender,
+                'address' => $request->address,
+            ]);
+            
+            return response()->json([
+                'error' => false,
+                'message' => 'Client updated successfully'
+            ]);
+            
+        } catch (Throwable $th) {
+            ResponseService::logErrorResponse($th, "CustomersController --> updateClient");
+            return response()->json([
+                'error' => true,
+                'message' => 'An error occurred while updating the client'
+            ], 500);
+        }
+    }
+    
+    /**
+     * Remove the specified client from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function destroy($id)
+    {
+        try {
+            ResponseService::noPermissionThenSendJson('customer-update');
+            
+            $user = User::findOrFail($id);
+            
+            // Ensure user has Client role
+            if (!$user->hasRole('Client')) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'User is not a client'
+                ], 422);
+            }
+            
+            // Soft delete the user
+            $user->delete();
+            
+            return response()->json([
+                'error' => false,
+                'message' => 'Client deleted successfully'
+            ]);
+            
+        } catch (Throwable $th) {
+            ResponseService::logErrorResponse($th, "CustomersController --> destroy");
+            return response()->json([
+                'error' => true,
+                'message' => 'An error occurred while deleting the client'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get category names by IDs
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getCategoryNames(Request $request)
+    {
+        ResponseService::noPermissionThenSendJson('customer-list');
+        
+        $categoryIds = explode(',', $request->ids);
+        $categories = Category::whereIn('id', $categoryIds)->pluck('name', 'id')->toArray();
+        
+        return response()->json([
+            'success' => true,
+            'data' => $categories
+        ]);
     }
 }

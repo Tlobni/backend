@@ -123,8 +123,10 @@ Route::group(['middleware' => ['auth', 'language']], static function () {
     Route::get('category/get-parent-categories', [CategoryController::class, 'getParentCategories'])->name('category.get-parent-categories');
 
     Route::middleware(['auth'])->group(function () {
-        Route::resource('category', CategoryController::class);
+        // Route resource must be after specific routes to avoid conflicts
         Route::group(['prefix' => 'category'], static function () {
+            Route::get('/service-experience', [CategoryController::class, 'serviceExperienceCategories'])->name('category.service.experience');
+            Route::get('/providers', [CategoryController::class, 'providerCategories'])->name('category.providers');
             Route::get('/{id}/subcategories', [CategoryController::class, 'getSubCategories'])->name('category.subcategories');
             Route::get('/{id}/custom-fields', [CategoryController::class, 'customFields'])->name('category.custom-fields');
             Route::get('/{id}/custom-fields/show', [CategoryController::class, 'getCategoryCustomFields'])->name('category.custom-fields.show');
@@ -132,7 +134,11 @@ Route::group(['middleware' => ['auth', 'language']], static function () {
             Route::get('/categories/order', [CategoryController::class, 'categoriesReOrder'])->name('category.order');
             Route::post('categories/change-order', [CategoryController::class, 'updateOrder'])->name('category.order.change');
             Route::get('/{id}/sub-category/change-order', [CategoryController::class, 'subCategoriesReOrder'])->name('sub.category.order.change');
+            // Add a specific route for showing categories
+            Route::get('/show/{category}', [CategoryController::class, 'show'])->name('category.show');
         });
+        
+        Route::resource('category', CategoryController::class)->except(['show']);
     });
     /*** Category Module : END ***/
 
@@ -242,8 +248,14 @@ Route::group(['middleware' => ['auth', 'language']], static function () {
     Route::group(['prefix' => 'customer'], static function () {
         Route::post('/assign-package', [CustomersController::class, 'assignPackage'])->name('customer.assign.package');
         Route::get('/list-by-role', [CustomersController::class, 'listByRole'])->name('customer.list-by-role');
+        Route::post('/toggle-status', [CustomersController::class, 'update'])->name('customer.toggle.status');
+        Route::post('/update-client', [CustomersController::class, 'updateClient'])->name('customer.update-client');
+        Route::get('/list', [CustomersController::class, 'show'])->name('customer.list');
+        Route::delete('/delete/{id}', [CustomersController::class, 'destroy'])->name('customer.delete');
+        Route::get('/get-category-names', [CustomersController::class, 'getCategoryNames'])->name('customer.get-category-names');
+        
+        Route::resource('customer', CustomersController::class);
     });
-    Route::resource('customer', CustomersController::class);
 
     // Customer routes
     Route::get('customer', [CustomersController::class, 'index'])->name('customer.index');

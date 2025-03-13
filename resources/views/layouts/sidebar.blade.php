@@ -70,9 +70,15 @@
                     <div class="sidebar-new-title">{{ __('Ads Listing') }}</div>
                     @canany(['category-list', 'category-create', 'category-update', 'category-delete'])
                         <li class="sidebar-item sidebar-submenus">
-                            <a href="{{ route('category.index') }}" class='sidebar-link'>
+                            <a href="{{ route('category.service.experience') }}" class='sidebar-link'>
                                 <i class="bi bi-list-task"></i>
-                                <span class="menu-item">{{ __('Categories') }}</span>
+                                <span class="menu-item">{{ __('Service & Experience Categories') }}</span>
+                            </a>
+                        </li>
+                        <li class="sidebar-item sidebar-submenus">
+                            <a href="{{ route('category.providers') }}" class='sidebar-link'>
+                                <i class="bi bi-people"></i>
+                                <span class="menu-item">{{ __('Provider Categories') }}</span>
                             </a>
                         </li>
                     @endcanany

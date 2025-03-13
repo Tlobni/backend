@@ -1,6 +1,10 @@
 @extends('layouts.main')
 @section('title')
-    {{__("Create Categories")}}
+    @if(isset($type) && $type == 'providers')
+        {{__("Create Provider Category")}}
+    @else
+        {{__("Create Service & Experience Category")}}
+    @endif
 @endsection
 
 @section('page-title')
@@ -16,14 +20,25 @@
 @section('content')
     <section class="section">
         <div class="buttons">
-            <a class="btn btn-primary" href="{{ route('category.index') }}">< {{__("Back to All Categories")}} </a>
+            @if(isset($type) && $type == 'providers')
+                <a class="btn btn-primary" href="{{ route('category.providers') }}">< {{__("Back to Provider Categories")}} </a>
+            @else
+                <a class="btn btn-primary" href="{{ route('category.service.experience') }}">< {{__("Back to Service & Experience Categories")}} </a>
+            @endif
         </div>
         <div class="row">
             <form action="{{ route('category.store') }}" method="POST" data-parsley-validate enctype="multipart/form-data">
                 @csrf
+                <input type="hidden" name="type" value="{{ $type ?? 'service_experience' }}">
                 <div class="col-md-12">
                     <div class="card">
-                        <div class="card-header">{{__("Add Category")}}</div>
+                        <div class="card-header">
+                            @if(isset($type) && $type == 'providers')
+                                {{__("Add Provider Category")}}
+                            @else
+                                {{__("Add Service & Experience Category")}}
+                            @endif
+                        </div>
 
                         <div class="card-body mt-3">
                             <div class="row">
@@ -41,34 +56,27 @@
                                 </div>
 
                                 <div class="col-md-6">
-                                    <div class="col-md-12 form-group mandatory">
-                                        <label for="category_type" class="mandatory form-label">{{ __('Category Type') }}</label>
-                                        <select name="type" id="category_type" class="form-select form-control" data-parsley-required="true" onchange="loadParentCategories()">
-                                            <option value="">{{ __('Select Type') }}</option>
-                                            <option value="service_experience">{{ __('Service & Experience') }}</option>
-                                            <option value="providers">{{ __('Providers') }}</option>
+                                    <div class="col-md-12 form-group">
+                                        <label for="p_category" class="form-label">{{ __('Parent Category') }}</label>
+                                        <select name="parent_category_id" id="p_category" class="form-select form-control" data-placeholder="{{__("Select Category")}}">
+                                            <option value="">{{__("Select a Category")}}</option>
+                                            @if(!empty($parentCategories))
+                                                @foreach($parentCategories as $category)
+                                                    <option value="{{ $category['id'] }}">{{ str_repeat('- ', $category['level']) . $category['name'] }}</option>
+                                                @endforeach
+                                            @endif
                                         </select>
                                     </div>
                                 </div>
 
                                 <div class="col-md-6">
                                     <div class="col-md-12 form-group">
-                                        <label for="p_category" class="form-label">{{ __('Parent Category') }}</label>
-                                        <select name="parent_category_id" id="p_category" class="form-select form-control" data-placeholder="{{__("Select Category")}}">
-                                            <option value="">{{__("Select a Category")}}</option>
-                                            <!-- Parent categories will be loaded dynamically based on selected type -->
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div class="col-md-6">
-                                    <div class="col-md-12 form-group mandatory">
-                                        <label for="Field Name" class="mandatory form-label">{{ __('Image') }}</label>
-                                        <input type="file" name="image" id="image" class="form-control" data-parsley-required="true" accept=".jpg,.jpeg,.png">
+                                        <label for="Field Name" class="form-label">{{ __('Image') }}</label>
+                                        <input type="file" name="image" id="image" class="form-control" accept=".jpg,.jpeg,.png">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
-                                    <label for="description" class="mandatory form-label">{{ __('Description') }}</label>
+                                    <label for="description" class="form-label">{{ __('Description') }}</label>
                                     <textarea name="description" id="description" class="form-control" cols="10" rows="5"></textarea>
                                     <div class="form-check form-switch mt-3">
                                         <input type="hidden" name="status" id="status" value="0">
@@ -103,60 +111,28 @@
     </section>
 @endsection
 
-<script>
-    function loadParentCategories() {
-        const typeSelect = document.getElementById('category_type');
-        const parentCategorySelect = document.getElementById('p_category');
-        const selectedType = typeSelect.value;
-        
-        // Clear current options except the first one
-        while (parentCategorySelect.options.length > 1) {
-            parentCategorySelect.remove(1);
-        }
-        
-        // If no type is selected, return
-        if (!selectedType) {
-            console.log('No type selected');
-            return;
-        }
-        
-        console.log('Loading parent categories for type:', selectedType);
-        
-        // Use fetch API
-        fetch('{{ url("category/get-parent-categories") }}?type=' + selectedType)
-            .then(response => response.json())
-            .then(data => {
-                console.log('Response data:', data);
-                if (data.success) {
-                    // Add options for each parent category
-                    data.categories.forEach(function(category) {
-                        const option = document.createElement('option');
-                        option.value = category.id;
-                        option.textContent = category.name;
-                        
-                        // Add indentation based on level
-                        if (category.level > 0) {
-                            option.textContent = '- '.repeat(category.level) + option.textContent;
-                        }
-                        
-                        parentCategorySelect.appendChild(option);
-                    });
-                    
-                    if (data.categories.length === 0) {
-                        console.log('No parent categories found for type:', selectedType);
-                    }
-                } else {
-                    console.error('Error from server:', data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Error loading parent categories:', error);
-            });
-    }
-</script>
-
 @push('scripts')
-<!-- Keep this empty to avoid conflicts -->
+<script>
+    // No need to load parent categories on page load since they're pre-loaded from the server
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize any components if needed
+        
+        // Set the type value to the hidden input if changing type is needed in the future
+        document.getElementById('category_slug').addEventListener('blur', function() {
+            // Auto-generate slug if empty
+            if (this.value.trim() === '') {
+                const nameField = document.getElementById('category_name');
+                if (nameField.value.trim() !== '') {
+                    this.value = nameField.value.trim()
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, '-')
+                        .replace(/-+/g, '-')
+                        .replace(/^-|-$/g, '');
+                }
+            }
+        });
+    });
+</script>
 @endpush
 
 
