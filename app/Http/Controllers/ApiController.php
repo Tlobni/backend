@@ -138,66 +138,44 @@ class ApiController extends Controller
             Log::info('User Signup Request', $request->all());
             // 1️⃣ Validate Request
             $validator = Validator::make($request->all(), [
-                'type'          => 'required|in:email,google,phone,apple',
-                'email'         => 'required_if:type,email|string|email|unique:users,email',
-                'password'      => 'required_if:type,email|string|min:6',
-                'firebase_id'   => 'required',
-                'country_code'  => 'nullable|string',
+                'email'         => 'required|string|email|unique:users,email',
+                'password'      => 'required|string|min:6',
                 'platform_type' => 'nullable|in:android,ios',
                 'fullName'      => 'nullable|string',
                 'gender'        => 'nullable|in:Male,Female,Other',
                 'location'      => 'nullable|string',
                 'userType'      => 'nullable|in:Provider,Client',
                 'providerType'  => 'nullable|in:Expert,Business',
-                'businessName'  => 'nullable|string',
                 'categories'    => 'nullable|string',
                 'phone'         => 'nullable|string',
+                'country_code'  => 'nullable|string',
             ]);
 
             if ($validator->fails()) {
                 return ResponseService::validationError($validator->errors()->first());
             }
 
-            // 2️⃣ Check if user already exists
-            $type = $request->type;
-            $firebase_id = $request->firebase_id;
-            $socialLogin = SocialLogin::where('firebase_id', $firebase_id)
-                ->where('type', $type)
-                ->with('user', function ($q) {
-                    $q->withTrashed();
-                })
-                ->whereHas('user', function ($q) {
-                    $q->role('User');
-                })
-                ->first();
-
-            if (!empty($socialLogin->user->deleted_at)) {
-                return ResponseService::errorResponse("User is deactivated. Please contact the administrator");
-            }
-
-            DB::beginTransaction();
-
-            // 3️⃣ Check if user exists
+            // Check if user exists and is deactivated
             $existingUser = User::withTrashed()->where('email', $request->email)->first();
 
             if ($existingUser && $existingUser->trashed()) {
                 return ResponseService::errorResponse('Your account has been deactivated.', null, config('constants.RESPONSE_CODE.DEACTIVATED_ACCOUNT'));
             }
 
-            // 4️⃣ Create or Update User
+            DB::beginTransaction();
+
+            // Create User
             $userData = [
-                'password' => bcrypt($request->password),
-                'name' => $request->fullName,
-                'gender' => $request->gender,
-                'location' => $request->location,
-                'business_name' => $request->businessName,
-                'city' => $request->city,
-                'categories' => $request->categories,
-                'phone' => $request->phone,
+                'password'      => bcrypt($request->password),
+                'name'          => $request->fullName,
+                'gender'        => $request->gender,
+                'location'      => $request->location,
+                'city'          => $request->city,
+                'categories'    => $request->categories,
+                'phone'         => $request->phone,
                 'platform_type' => $request->platform_type,
-                'type' => $request->type,
-                'firebase_id' => $request->firebase_id,
-                'profile' => $request->hasFile('profile')
+                'type'          => $request->providerType, // Set type to 'email' by default
+                'profile'       => $request->hasFile('profile')
                     ? $request->file('profile')->store('user_profile', 'public')
                     : null,
             ];
@@ -207,7 +185,7 @@ class ApiController extends Controller
                 $userData
             );
 
-            // 5️⃣ Assign Role Based on User Type
+            // Assign Role Based on User Type
             if ($request->userType === 'Provider') {
                 if ($request->providerType === 'Expert') {
                     $user->syncRoles(['Expert']);
@@ -219,16 +197,10 @@ class ApiController extends Controller
                 $user->syncRoles(['Client']);
             }
 
-            // 6️⃣ Create Social Login Entry
-            SocialLogin::updateOrCreate(
-                ['type' => $request->type, 'user_id' => $user->id],
-                ['firebase_id' => $request->firebase_id]
-            );
-
-            // 7️⃣ Log In User
+            // Log In User
             Auth::login($user);
 
-            // 8️⃣ Generate Token
+            // Generate Token
             $token = $user->createToken('auth_token')->plainTextToken;
 
             DB::commit();
@@ -253,13 +225,22 @@ class ApiController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'name'                  => 'nullable|string',
+                'fullName'              => 'nullable|string',
                 'profile'               => 'nullable|mimes:jpg,jpeg,png|max:6144',
                 'email'                 => 'nullable|email|unique:users,email,' . Auth::user()->id,
                 'mobile'                => 'nullable|unique:users,mobile,' . Auth::user()->id,
                 'fcm_id'                => 'nullable',
                 'address'               => 'nullable',
                 'show_personal_details' => 'boolean',
-                'country_code'          => 'nullable|string'
+                'country_code'          => 'nullable|string',
+                'gender'                => 'nullable|in:Male,Female,Other',
+                'location'              => 'nullable|string',
+                'userType'              => 'nullable|in:Provider,Client',
+                'providerType'          => 'nullable|in:Expert,Business',
+                'businessName'          => 'nullable|string',
+                'categories'            => 'nullable|string',
+                'phone'                 => 'nullable|string',
+                'city'                  => 'nullable|string'
             ]);
 
             if ($validator->fails()) {
@@ -270,6 +251,16 @@ class ApiController extends Controller
             //Email should not be updated when type is google.
             $data = $app_user->type == "google" ? $request->except('email') : $request->all();
 
+            // Map fullName to name if provided
+            if (!empty($request->fullName)) {
+                $data['name'] = $request->fullName;
+            }
+            
+            // Map phone to mobile if provided
+            if (!empty($request->phone)) {
+                $data['mobile'] = $request->phone;
+            }
+            
             if ($request->hasFile('profile')) {
                 // Get original profile value
                 $originalProfile = DB::table('users')->where('id', $app_user->id)->value('profile');
@@ -279,13 +270,43 @@ class ApiController extends Controller
             if (!empty($request->fcm_id)) {
                 UserFcmToken::updateOrCreate(['fcm_token' => $request->fcm_id], ['user_id' => $app_user->id, 'created_at' => Carbon::now(), 'updated_at' => Carbon::now()]);
             }
-            $data['show_personal_details'] = $request->show_personal_details;
+            
+            // Set show_personal_details if provided
+            if (isset($request->show_personal_details)) {
+                $data['show_personal_details'] = $request->show_personal_details;
+            }
+
+            // Handle role changes if userType is provided
+            if (!empty($request->userType)) {
+                // Get user model directly - as Auth::user() doesn't always load the trait properly
+                $user = User::find($app_user->id);
+                
+                if ($request->userType === 'Provider') {
+                    if ($request->providerType === 'Expert') {
+                        $user->syncRoles(['Expert']);
+                        // Also update provider_type in the database
+                        $data['provider_type'] = 'Expert';
+                    } elseif ($request->providerType === 'Business') {
+                        $user->syncRoles(['Business']);
+                        // Also update provider_type in the database
+                        $data['provider_type'] = 'Business';
+                    }
+                } else {
+                    // Assign "Client" role for non-providers
+                    $user->syncRoles(['Client']);
+                    // Clear provider_type if changing to Client
+                    $data['provider_type'] = null;
+                }
+            }
 
             // Update user data
             DB::table('users')->where('id', $app_user->id)->update($data);
 
             // Get updated user
             $updatedUser = User::find($app_user->id);
+            
+            // Include the user's role
+            $updatedUser->getRoleNames()->first();
 
             ResponseService::successResponse("Profile Updated Successfully", $updatedUser);
         } catch (Throwable $th) {

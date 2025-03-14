@@ -15,6 +15,9 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Throwable;
+use App\Models\Notifications;
+use App\Models\UserFcmToken;
+use App\Services\NotificationService;
 
 class PackageController extends Controller {
 
@@ -317,8 +320,35 @@ class PackageController extends Controller {
     {
         ResponseService::noPermissionThenRedirect('user-package-update');
         try {
-            $userPackage = UserPurchasedPackage::findOrFail($id);
+            $userPackage = UserPurchasedPackage::with(['user', 'package'])->findOrFail($id);
             $userPackage->update(['status' => 1]); // Approved
+            
+            // Create notification title and message
+            $notificationTitle = 'Package Approved';
+            $notificationMessage = "Your package '{$userPackage->package->name}' has been approved";
+            
+            // Create notification record in database
+            Notifications::create([
+                'title' => $notificationTitle,
+                'message' => $notificationMessage,
+                'user_id' => $userPackage->user->id,
+                'send_to' => 'selected'
+            ]);
+            
+            // Send FCM notification
+            $user_token = UserFcmToken::where('user_id', $userPackage->user->id)
+                ->pluck('fcm_token')
+                ->toArray();
+                
+            if (!empty($user_token)) {
+                NotificationService::sendFcmNotification(
+                    $user_token, 
+                    $notificationTitle, 
+                    $notificationMessage, 
+                    "package-update", 
+                    ['id' => $userPackage->id]
+                );
+            }
             
             // Return a success message and refresh the page
             return redirect()->route('package.users.index')->with('success', 'Package approved successfully');
@@ -332,8 +362,35 @@ class PackageController extends Controller {
     {
         ResponseService::noPermissionThenRedirect('user-package-update');
         try {
-            $userPackage = UserPurchasedPackage::findOrFail($id);
+            $userPackage = UserPurchasedPackage::with(['user', 'package'])->findOrFail($id);
             $userPackage->update(['status' => 0]); // Blocked
+            
+            // Create notification title and message
+            $notificationTitle = 'Package Blocked';
+            $notificationMessage = "Your package '{$userPackage->package->name}' has been blocked";
+            
+            // Create notification record in database
+            Notifications::create([
+                'title' => $notificationTitle,
+                'message' => $notificationMessage,
+                'user_id' => $userPackage->user->id,
+                'send_to' => 'selected'
+            ]);
+            
+            // Send FCM notification
+            $user_token = UserFcmToken::where('user_id', $userPackage->user->id)
+                ->pluck('fcm_token')
+                ->toArray();
+                
+            if (!empty($user_token)) {
+                NotificationService::sendFcmNotification(
+                    $user_token, 
+                    $notificationTitle, 
+                    $notificationMessage, 
+                    "package-update", 
+                    ['id' => $userPackage->id]
+                );
+            }
             
             // Return a success message and refresh the page
             return redirect()->route('package.users.index')->with('success', 'Package blocked successfully');

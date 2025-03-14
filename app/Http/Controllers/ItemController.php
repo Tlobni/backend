@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
+use App\Models\Notifications;
 
 class ItemController extends Controller {
 
@@ -215,8 +216,23 @@ class ItemController extends Controller {
                 'rejected_reason' => ($request->status == "rejected") ? $request->rejected_reason : ''
             ]);
             $user_token = UserFcmToken::where('user_id', $item->user->id)->pluck('fcm_token')->toArray();
+            
+            // Create notification in the database
+            $notificationTitle = 'About ' . $item->name;
+            $notificationMessage = "Your Item is " . ucfirst($request->status);
+            
+            // Create notification record
+            Notifications::create([
+                'title' => $notificationTitle,
+                'message' => $notificationMessage,
+                'item_id' => $item->id,
+                'user_id' => $item->user->id,
+                'send_to' => 'selected'
+            ]);
+            
+            // Send FCM notification
             if (!empty($user_token)) {
-                NotificationService::sendFcmNotification($user_token, 'About ' . $item->name, "Your Item is " . ucfirst($request->status), "item-update", ['id' => $request->id,]);
+                NotificationService::sendFcmNotification($user_token, $notificationTitle, $notificationMessage, "item-update", ['id' => $item->id]);
             }
             ResponseService::successResponse('Item Status Updated Successfully');
         } catch (Throwable $th) {
