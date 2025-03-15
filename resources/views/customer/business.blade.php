@@ -246,17 +246,33 @@
             window.location.href = "{{ url('customer') }}/" + row.id + "/edit";
         },
         'click .delete-user': function (e, value, row, index) {
+            console.log('Delete user clicked for row:', row);
             if (confirm("{{ __('Are you sure you want to delete this user?') }}")) {
+                console.log('User confirmed deletion of user ID:', row.id);
                 $.ajax({
-                    url: "{{ url('customer') }}/" + row.id,
+                    url: "{{ route('customer.delete', '') }}/" + row.id,
                     type: 'DELETE',
                     data: {
-                        "_token": "{{ csrf_token() }}"
+                        "_token": "{{ csrf_token() }}",
+                        "role": "Business" // Adding role information to help with debugging
+                    },
+                    headers: {
+                        'X-CSRF-TOKEN': "{{ csrf_token() }}"
                     },
                     success: function (result) {
+                        console.log('Delete user response:', result);
                         if (result.error === false) {
+                            console.log('Refreshing table after successful deletion');
                             $('#userTable').bootstrapTable('refresh');
+                        } else {
+                            console.error('Error deleting user:', result.message);
+                            alert(result.message || 'Error deleting user');
                         }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('AJAX error when deleting user:', status, error);
+                        console.log('XHR object:', xhr);
+                        alert('Error deleting user: ' + error);
                     }
                 });
             }
@@ -278,6 +294,42 @@
     $(document).ready(function () {
         // Initialize the table
         $('#userTable').bootstrapTable();
+        
+        // Add direct event handler for delete button clicks (in addition to the bootstrap table events)
+        $(document).on('click', '.delete-user', function(e) {
+            // Only handle clicks that aren't already being handled by bootstrap table events
+            if (!$(this).closest('tr').attr('data-uniqueid')) {
+                console.log('Direct delete button clicked');
+                const userId = $(this).data('id');
+                console.log('User ID from direct click:', userId);
+                
+                if (confirm("{{ __('Are you sure you want to delete this user?') }}")) {
+                    $.ajax({
+                        url: "{{ route('customer.delete', '') }}/" + userId,
+                        type: 'DELETE',
+                        data: {
+                            "_token": "{{ csrf_token() }}",
+                            "role": "Business"
+                        },
+                        headers: {
+                            'X-CSRF-TOKEN': "{{ csrf_token() }}"
+                        },
+                        success: function(result) {
+                            console.log('Direct delete response:', result);
+                            if (result.error === false) {
+                                $('#userTable').bootstrapTable('refresh');
+                            } else {
+                                alert(result.message || 'Error deleting user');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('AJAX error:', status, error);
+                            alert('Error deleting user: ' + error);
+                        }
+                    });
+                }
+            }
+        });
         
         // Handle status switch change
         $(document).on('change', '.status-switch', function () {

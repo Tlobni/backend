@@ -129,7 +129,10 @@ class CustomersController extends Controller {
                 }
             }
 
-            // Only show assign package button for roles other than Client
+            // Initialize operate as empty string
+            $tempRow['operate'] = '';
+            
+            // For non-Client roles, add assign package button
             if ($role !== 'Client') {
                 $tempRow['operate'] = BootstrapTableService::button(
                     'fa fa-cart-plus',
@@ -142,13 +145,19 @@ class CustomersController extends Controller {
                         "data-id"        => $row->id
                     ]
                 );
+                
+                // Only add delete button for Expert and Business roles (no edit button)
+                $tempRow['operate'] .= BootstrapTableService::button(
+                    'fas fa-trash',
+                    'javascript:void(0)',
+                    ['btn-danger', 'delete-user'],
+                    [
+                        'title' => trans('Delete'),
+                        'data-id' => $row->id
+                    ]
+                );
             } else {
-                // For clients, initialize operate as empty string
-                $tempRow['operate'] = '';
-            }
-            
-            // Add edit and delete buttons for clients
-            if ($role === 'Client') {
+                // For Client role, add both edit and delete buttons
                 $tempRow['operate'] .= BootstrapTableService::editButton('javascript:void(0)', false, '', 'edit-user');
                 $tempRow['operate'] .= BootstrapTableService::button(
                     'fas fa-trash',
@@ -160,6 +169,7 @@ class CustomersController extends Controller {
                     ]
                 );
             }
+            
             $rows[] = $tempRow;
         }
 
@@ -289,7 +299,10 @@ class CustomersController extends Controller {
                 }
             }
 
-            // Only show assign package button for roles other than Client
+            // Initialize operate as empty string
+            $tempRow['operate'] = '';
+            
+            // For non-Client roles, add assign package button
             if ($role !== 'Client') {
                 $tempRow['operate'] = BootstrapTableService::button(
                     'fa fa-cart-plus',
@@ -302,13 +315,19 @@ class CustomersController extends Controller {
                         "data-id"        => $row->id
                     ]
                 );
+                
+                // Only add delete button for Expert and Business roles (no edit button)
+                $tempRow['operate'] .= BootstrapTableService::button(
+                    'fas fa-trash',
+                    'javascript:void(0)',
+                    ['btn-danger', 'delete-user'],
+                    [
+                        'title' => trans('Delete'),
+                        'data-id' => $row->id
+                    ]
+                );
             } else {
-                // For clients, initialize operate as empty string
-                $tempRow['operate'] = '';
-            }
-            
-            // Add edit and delete buttons for clients
-            if ($role === 'Client') {
+                // For Client role, add both edit and delete buttons
                 $tempRow['operate'] .= BootstrapTableService::editButton('javascript:void(0)', false, '', 'edit-user');
                 $tempRow['operate'] .= BootstrapTableService::button(
                     'fas fa-trash',
@@ -320,6 +339,7 @@ class CustomersController extends Controller {
                     ]
                 );
             }
+            
             $rows[] = $tempRow;
         }
 
@@ -561,7 +581,7 @@ class CustomersController extends Controller {
     }
     
     /**
-     * Remove the specified client from storage.
+     * Remove the specified user from storage.
      *
      * @param  int  $id
      * @return \Illuminate\Http\JsonResponse
@@ -571,29 +591,60 @@ class CustomersController extends Controller {
         try {
             ResponseService::noPermissionThenSendJson('customer-update');
             
-            $user = User::findOrFail($id);
+            // Log the deletion attempt to help with debugging
+            Log::info('User deletion attempt', [
+                'user_id' => $id,
+                'role' => request('role') ?? 'unknown',
+                'requested_by' => auth()->id() ?? 'unauthenticated'
+            ]);
             
-            // Ensure user has Client role
-            if (!$user->hasRole('Client')) {
+            $user = User::withTrashed()->findOrFail($id);
+            
+            // Check if user is already deleted
+            if ($user->trashed()) {
                 return response()->json([
                     'error' => true,
-                    'message' => 'User is not a client'
-                ], 422);
+                    'message' => 'User is already deleted'
+                ], 400);
             }
             
-            // Soft delete the user
-            $user->delete();
+            // Get the user's role for logging
+            $userRoles = $user->getRoleNames()->toArray();
+            Log::info('Deleting user with roles', [
+                'user_id' => $id,
+                'roles' => $userRoles
+            ]);
+            
+            // Force flag to ensure deletion works
+            $result = $user->delete();
+            
+            // Log the result
+            Log::info('User deletion result', [
+                'user_id' => $id,
+                'result' => $result ? 'success' : 'failed'
+            ]);
             
             return response()->json([
                 'error' => false,
-                'message' => 'Client deleted successfully'
+                'message' => 'User deleted successfully',
+                'user_id' => $id,
+                'roles' => $userRoles
             ]);
             
         } catch (Throwable $th) {
+            // Enhanced error logging
+            Log::error('Error deleting user', [
+                'user_id' => $id,
+                'exception' => $th->getMessage(),
+                'file' => $th->getFile(),
+                'line' => $th->getLine(),
+                'trace' => $th->getTraceAsString()
+            ]);
+            
             ResponseService::logErrorResponse($th, "CustomersController --> destroy");
             return response()->json([
                 'error' => true,
-                'message' => 'An error occurred while deleting the client'
+                'message' => 'An error occurred while deleting the user: ' . $th->getMessage()
             ], 500);
         }
     }
