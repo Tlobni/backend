@@ -381,7 +381,7 @@ class ApiController extends Controller
                 'start_date'  => Carbon::now(),
                 'total_limit' => $package->item_limit == "unlimited" ? null : $package->item_limit,
                 'end_date'    => $package->duration == "unlimited" ? null : Carbon::now()->addDays($package->duration),
-                'status'      => 1  // Changed from 0 to 1 to auto-approve
+                'status'      => 0  // Changed from 0 to 1 to auto-approve
             ]);
             ResponseService::successResponse('Package has been successfully assigned to your account.');
         } catch (Throwable $th) {
