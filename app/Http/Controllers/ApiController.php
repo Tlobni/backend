@@ -1486,10 +1486,10 @@ class ApiController extends Controller
         }
         try {
             DB::beginTransaction();
-            $paymentConfigurations = PaymentConfiguration::where(['status' => 1, 'payment_method' => $request->payment_method])->first();
-            if (empty($paymentConfigurations)) {
-                ResponseService::errorResponse("Payment is not Enabled");
-            }
+            // $paymentConfigurations = PaymentConfiguration::where(['status' => 1, 'payment_method' => $request->payment_method])->first();
+            // if (empty($paymentConfigurations)) {
+            //     ResponseService::errorResponse("Payment is not Enabled");
+            // }
 
             $package = Package::whereNot('final_price', 0)->findOrFail($request->package_id);
 
