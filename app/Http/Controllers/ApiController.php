@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-
 use App\Http\Resources\ItemCollection;
 use App\Models\Area;
 use App\Models\BlockUser;
@@ -382,9 +381,9 @@ class ApiController extends Controller
                 'start_date'  => Carbon::now(),
                 'total_limit' => $package->item_limit == "unlimited" ? null : $package->item_limit,
                 'end_date'    => $package->duration == "unlimited" ? null : Carbon::now()->addDays($package->duration),
-                'status'      => 0
+                'status'      => 1  // Changed from 0 to 1 to auto-approve
             ]);
-            ResponseService::successResponse('Package Purchased Applied. Waiting for admin approval.');
+            ResponseService::successResponse('Package has been successfully assigned to your account.');
         } catch (Throwable $th) {
             ResponseService::logErrorResponse($th, "API Controller -> assignFreePackage");
             ResponseService::errorResponse();
@@ -1192,11 +1191,16 @@ class ApiController extends Controller
     public function getPaymentSettings()
     {
         try {
-            $result = PaymentConfiguration::select(['currency_code', 'payment_method', 'api_key', 'status'])->where('status', 1)->get();
-            $response = [];
-            foreach ($result as $payment) {
-                $response[$payment->payment_method] = $payment->toArray();
-            }
+            // Instead of querying payment configurations, return a simple cash payment option
+            $response = [
+                'Cash' => [
+                    'currency_code' => 'USD', // Use your preferred currency
+                    'payment_method' => 'Cash',
+                    'api_key' => '',
+                    'status' => 1
+                ]
+            ];
+            
             ResponseService::successResponse("Data Fetched Successfully", $response);
         } catch (Throwable $th) {
             ResponseService::logErrorResponse($th, "API Controller -> getPaymentSettings");
@@ -1477,46 +1481,55 @@ class ApiController extends Controller
     public function getPaymentIntent(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'package_id'     => 'required',
-            'payment_method' => 'required|in:Stripe,Razorpay,Paystack,PhonePe',
-            'platform_type'  => 'required_if:payment_method,==,Paystack|string'
+            'package_id' => 'required',
+            // Removed payment_method and platform_type validation since we'll use cash by default
         ]);
         if ($validator->fails()) {
             ResponseService::validationError($validator->errors()->first());
         }
         try {
             DB::beginTransaction();
-            // $paymentConfigurations = PaymentConfiguration::where(['status' => 1, 'payment_method' => $request->payment_method])->first();
-            // if (empty($paymentConfigurations)) {
-            //     ResponseService::errorResponse("Payment is not Enabled");
-            // }
-
+            
+            // Skip payment configuration check and use cash as default
+            $paymentMethod = 'cash';
+            
             $package = Package::whereNot('final_price', 0)->findOrFail($request->package_id);
 
             $purchasedPackage = UserPurchasedPackage::onlyActive()->where(['user_id' => Auth::user()->id, 'package_id' => $request->package_id])->first();
             if (!empty($purchasedPackage)) {
                 ResponseService::errorResponse("You already have applied for this package");
             }
+            
             //Add Payment Data to Payment Transactions Table
             $paymentTransactionData = PaymentTransaction::create([
                 'user_id'         => Auth::user()->id,
                 'amount'          => $package->final_price,
-                'payment_gateway' => ucfirst($request->payment_method),
-                'payment_status'  => 'Pending',
-                'order_id'        => null
+                'payment_gateway' => 'cash',
+                'payment_status'  => 'succeed', // Automatically mark as successful for cash payments
+                'order_id'        => 'cash-' . uniqid() // Generate a unique cash payment reference
             ]);
 
+            // Create a simple payment intent response for the client
+            $paymentIntent = [
+                'id' => $paymentTransactionData->order_id,
+                'amount' => $package->final_price,
+                'currency' => 'USD', // You may want to adjust this based on your default currency
+                'status' => 'succeed',
+                'payment_method' => 'cash'
+            ];
 
-            $paymentIntent = PaymentService::create($request->payment_method)->createAndFormatPaymentIntent(round($package->final_price, 2), [
-                'payment_transaction_id' => $paymentTransactionData->id,
-                'package_id'             => $package->id,
-                'user_id'                => Auth::user()->id,
-                'email'                  => Auth::user()->email,
-                'platform_type'          => $request->platform_type
+            // Create user purchased package record immediately since it's a cash transaction
+            UserPurchasedPackage::create([
+                'user_id'                 => Auth::user()->id,
+                'package_id'              => $request->package_id,
+                'start_date'              => Carbon::now(),
+                'end_date'                => $package->duration == "unlimited" ? null : Carbon::now()->addDays($package->duration),
+                'total_limit'             => $package->item_limit == "unlimited" ? null : $package->item_limit,
+                'used_limit'              => 0,
+                'status'                  => 1,
+                'payment_transactions_id' => $paymentTransactionData->id,
             ]);
-            $paymentTransactionData->update(['order_id' => $paymentIntent['id']]);
 
-            $paymentTransactionData = PaymentTransaction::findOrFail($paymentTransactionData->id);
             // Custom Array to Show as response
             $paymentGatewayDetails = array(
                 ...$paymentIntent,
@@ -1524,7 +1537,7 @@ class ApiController extends Controller
             );
 
             DB::commit();
-            ResponseService::successResponse("", ["payment_intent" => $paymentGatewayDetails, "payment_transaction" => $paymentTransactionData]);
+            ResponseService::successResponse("Package assigned successfully", ["payment_intent" => $paymentGatewayDetails, "payment_transaction" => $paymentTransactionData]);
         } catch (Throwable $e) {
             DB::rollBack();
             ResponseService::logErrorResponse($e);
