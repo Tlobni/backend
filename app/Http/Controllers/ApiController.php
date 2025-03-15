@@ -1527,13 +1527,13 @@ class ApiController extends Controller
                 'total_limit'             => $package->item_limit == "unlimited" ? null : $package->item_limit,
                 'used_limit'              => 0,
                 'status'                  => 0,
-                'payment_transactions_id' => '',
+                'payment_transactions_id' => $paymentTransactionData->id,
             ]);
 
             // Custom Array to Show as response
             $paymentGatewayDetails = array(
                 ...$paymentIntent,
-                'payment_transaction_id' => '',
+                'payment_transaction_id' => $paymentTransactionData->id,
             );
 
             DB::commit();
