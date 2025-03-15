@@ -316,12 +316,32 @@ class WebhookController extends Controller {
             $package = Package::find($package_id);
 
             if (!empty($package)) {
+                // Check if user already has an active package
+                $existingPackage = UserPurchasedPackage::where('user_id', $user_id)
+                    ->where('status', 1)
+                    ->where('start_date', '<=', date('Y-m-d'))
+                    ->where(function ($q) {
+                        $q->whereDate('end_date', '>', date('Y-m-d'))->orWhereNull('end_date');
+                    })
+                    ->first();
+                    
+                if ($existingPackage) {
+                    // Update existing package status to 0 (expired)
+                    $existingPackage->update(['status' => 0]);
+                    
+                    // Log the replacement
+                    Log::info("User ID {$user_id} had existing package ID {$existingPackage->package_id} replaced with new package ID {$package_id}");
+                }
+                
                 UserPurchasedPackage::create([
                     'package_id'  => $package_id,
                     'user_id'     => $user_id,
                     'start_date'  => Carbon::now(),
                     'end_date'    => $package->duration == "unlimited" ? null : Carbon::now()->addDays($package->duration),
                     'total_limit' => $package->item_limit == "unlimited" ? null : $package->item_limit,
+                    'used_limit'  => 0,
+                    'status'      => 1,
+                    'payment_transactions_id' => $payment_transaction_id,
                 ]);
             }
 

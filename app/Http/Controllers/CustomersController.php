@@ -82,6 +82,9 @@ class CustomersController extends Controller {
         if (!empty($request->search)) {
             $sql = $sql->search($request->search);
         }
+        
+        // Include user_purchased_packages relationship for all roles
+        $sql = $sql->with(['user_purchased_packages.package']);
 
         $total = $sql->count();
         $sql->skip($offset)->take($limit);
@@ -98,6 +101,23 @@ class CustomersController extends Controller {
             $tempRow['auto_approve_item'] = $row->auto_approve_item;
             $tempRow['role'] = $role;
 
+            // Add active package information
+            $activePackage = $row->user_purchased_packages
+                ->where('status', 1)
+                ->filter(function($package) {
+                    // Start date is today or in the past
+                    return $package->start_date <= date('Y-m-d') &&
+                        // End date is null or in the future
+                        ($package->end_date === null || $package->end_date > date('Y-m-d')) &&
+                        // Used limit is less than total limit or total limit is null
+                        ($package->total_limit === null || $package->used_limit < $package->total_limit);
+                })
+                ->first();
+            
+            $tempRow['has_active_package'] = !empty($activePackage);
+            $tempRow['active_package_name'] = $activePackage ? ($activePackage->package->name ?? 'Unknown Package') : null;
+            $tempRow['active_package_expiry'] = $activePackage ? $activePackage->end_date : null;
+
             if (config('app.demo_mode')) {
                 // Get the first two digits, Apply enough asterisks to cover the middle numbers ,  Get the last two digits;
                 if (!empty($row->mobile)) {
@@ -109,16 +129,23 @@ class CustomersController extends Controller {
                 }
             }
 
-            $tempRow['operate'] = BootstrapTableService::button(
-                'fa fa-cart-plus',
-                route('customer.assign.package', $row->id),
-                ['btn-outline-danger', 'assign_package'],
-                [
-                    'title'          => __("Assign Package"),
-                    "data-bs-target" => "#assignPackageModal",
-                    "data-bs-toggle" => "modal"
-                ]
-            );
+            // Only show assign package button for roles other than Client
+            if ($role !== 'Client') {
+                $tempRow['operate'] = BootstrapTableService::button(
+                    'fa fa-cart-plus',
+                    route('customer.assign.package', $row->id),
+                    ['btn-outline-danger', 'assign_package'],
+                    [
+                        'title'          => __("Assign Package"),
+                        "data-bs-target" => "#assignPackageModal",
+                        "data-bs-toggle" => "modal",
+                        "data-id"        => $row->id
+                    ]
+                );
+            } else {
+                // For clients, initialize operate as empty string
+                $tempRow['operate'] = '';
+            }
             
             // Add edit and delete buttons for clients
             if ($role === 'Client') {
@@ -181,7 +208,7 @@ class CustomersController extends Controller {
             // Add relationships based on role if they exist
             if ($role === 'Expert' || $role === 'Business') {
                 // For Experts and Business, include their services/experiences if the relationship exists
-                $sql = $sql->with(['items']);
+                $sql = $sql->with(['items', 'user_purchased_packages.package']);
             }
         } catch (\Exception $e) {
             Log::error('Error loading relationships: ' . $e->getMessage());
@@ -209,6 +236,23 @@ class CustomersController extends Controller {
             $tempRow['auto_approve_item'] = $row->auto_approve_item ?? 0;
             $tempRow['role'] = $role;
             
+            // Add active package information
+            $activePackage = $row->user_purchased_packages
+                ->where('status', 1)
+                ->filter(function($package) {
+                    // Start date is today or in the past
+                    return $package->start_date <= date('Y-m-d') &&
+                        // End date is null or in the future
+                        ($package->end_date === null || $package->end_date > date('Y-m-d')) &&
+                        // Used limit is less than total limit or total limit is null
+                        ($package->total_limit === null || $package->used_limit < $package->total_limit);
+                })
+                ->first();
+            
+            $tempRow['has_active_package'] = !empty($activePackage);
+            $tempRow['active_package_name'] = $activePackage ? ($activePackage->package->name ?? 'Unknown Package') : null;
+            $tempRow['active_package_expiry'] = $activePackage ? $activePackage->end_date : null;
+
             // Add role-specific fields
             if ($role === 'Expert') {
                 // Expert-specific fields
@@ -245,16 +289,23 @@ class CustomersController extends Controller {
                 }
             }
 
-            $tempRow['operate'] = BootstrapTableService::button(
-                'fa fa-cart-plus',
-                route('customer.assign.package', $row->id),
-                ['btn-outline-danger', 'assign_package'],
-                [
-                    'title'          => __("Assign Package"),
-                    "data-bs-target" => "#assignPackageModal",
-                    "data-bs-toggle" => "modal"
-                ]
-            );
+            // Only show assign package button for roles other than Client
+            if ($role !== 'Client') {
+                $tempRow['operate'] = BootstrapTableService::button(
+                    'fa fa-cart-plus',
+                    route('customer.assign.package', $row->id),
+                    ['btn-outline-danger', 'assign_package'],
+                    [
+                        'title'          => __("Assign Package"),
+                        "data-bs-target" => "#assignPackageModal",
+                        "data-bs-toggle" => "modal",
+                        "data-id"        => $row->id
+                    ]
+                );
+            } else {
+                // For clients, initialize operate as empty string
+                $tempRow['operate'] = '';
+            }
             
             // Add edit and delete buttons for clients
             if ($role === 'Client') {
@@ -296,9 +347,33 @@ class CustomersController extends Controller {
             ResponseService::noPermissionThenSendJson('customer-list');
             $user = User::find($request->user_id);
             if (empty($user)) {
+                ResponseService::errorResponse('User not found');
+            }
+            
+            // Check if user is soft deleted (inactive)
+            if (!empty($user->deleted_at)) {
                 ResponseService::errorResponse('User is not Active');
             }
+            
             $package = Package::findOrFail($request->package_id);
+            
+            // Check if user already has an active package
+            $existingPackage = UserPurchasedPackage::where('user_id', $request->user_id)
+                ->where('status', 1)
+                ->where('start_date', '<=', date('Y-m-d'))
+                ->where(function ($q) {
+                    $q->whereDate('end_date', '>', date('Y-m-d'))->orWhereNull('end_date');
+                })
+                ->first();
+                
+            if ($existingPackage) {
+                // Update existing package status to 0 (expired)
+                $existingPackage->update(['status' => 0]);
+                
+                // Log the replacement
+                Log::info("User ID {$request->user_id} had existing package ID {$existingPackage->package_id} replaced with new package ID {$request->package_id}");
+            }
+            
             // Create a new payment transaction
             $paymentTransaction = PaymentTransaction::create([
                 'user_id'         => $request->user_id,
@@ -317,6 +392,7 @@ class CustomersController extends Controller {
                 'end_date'                => $package->duration == "unlimited" ? null :Carbon::now()->addDays($package->duration),
                 'total_limit'             => $package->item_limit == "unlimited" ? null : $package->item_limit,
                 'used_limit'              => 0,
+                'status'                  => 1,
                 'payment_transactions_id' => $paymentTransaction->id,
             ]);
             DB::commit();

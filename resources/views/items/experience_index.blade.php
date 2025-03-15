@@ -50,6 +50,7 @@
                             <th scope="col" data-field="name" data-align="center" data-sortable="true">{{ __('Name') }}</th>
                             <th scope="col" data-field="description" data-align="center" data-sortable="true" data-formatter="descriptionFormatter">{{ __('Description') }}</th>
                             <th scope="col" data-field="user.name" data-align="center" data-sort-name="user_name" data-sortable="true">{{ __('User') }}</th>
+                            <th scope="col" data-field="category.name" data-align="center" data-sort-name="category_name" data-sortable="true">{{ __('Category') }}</th>
                             <th scope="col" data-field="price" data-align="center" data-sortable="true">{{ __('Price') }}</th>
                             <th scope="col" data-field="image" data-align="center" data-sortable="false" data-escape="false" data-formatter="imageFormatter">{{ __('Image') }}</th>
                             <th scope="col" data-field="gallery_images" data-align="center" data-sortable="false" data-formatter="galleryImageFormatter" data-escape="false">{{ __('Other Images') }}</th>

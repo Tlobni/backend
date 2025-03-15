@@ -34,52 +34,67 @@
                             </select>
                         </div>
                         <table class="table-borderless table-striped" aria-describedby="mydesc" id="table_list"
-                            data-toggle="table" data-url="{{ route('service.items.data') }}" data-click-to-select="true"
-                            data-side-pagination="server" data-pagination="true"
-                            data-page-list="[5, 10, 20, 50, 100, 200]" data-search="true"
-                            data-show-columns="true" data-show-refresh="true" data-fixed-columns="true"
-                            data-fixed-number="1" data-fixed-right-number="1" data-trim-on-search="false"
-                            data-escape="true"
-                            data-responsive="true" data-sort-name="id" data-sort-order="desc"
-                            data-pagination-successively-size="3" data-table="items" data-status-column="deleted_at"
-                            data-show-export="true" data-export-options='{"fileName": "service-item-list","ignoreColumn": ["operate"]}' data-export-types="['pdf','json', 'xml', 'csv', 'txt', 'sql', 'doc', 'excel']"
-                            data-mobile-responsive="true" data-filter-control="true" data-filter-control-container="#filters" data-toolbar="#filters">
-                        <thead class="thead-dark">
-                        <tr>
-                            <th scope="col" data-field="id" data-align="center" data-sortable="true">{{ __('ID') }}</th>
-                            <th scope="col" data-field="name" data-align="center" data-sortable="true">{{ __('Name') }}</th>
-                            <th scope="col" data-field="description" data-align="center" data-sortable="true" data-formatter="descriptionFormatter">{{ __('Description') }}</th>
-                            <th scope="col" data-field="user.name" data-align="center" data-sort-name="user_name" data-sortable="true">{{ __('User') }}</th>
-                            <th scope="col" data-field="price" data-align="center" data-sortable="true">{{ __('Price') }}</th>
-                            <th scope="col" data-field="image" data-align="center" data-sortable="false" data-escape="false" data-formatter="imageFormatter">{{ __('Image') }}</th>
-                            <th scope="col" data-field="gallery_images" data-align="center" data-sortable="false" data-formatter="galleryImageFormatter" data-escape="false">{{ __('Other Images') }}</th>
-                            <th scope="col" data-field="latitude" data-sortable="true" data-visible="false">{{ __('Latitude') }}</th>
-                            <th scope="col" data-field="longitude" data-sortable="true" data-visible="false">{{ __('Longitude') }}</th>
-                            <th scope="col" data-field="address" data-sortable="true" data-visible="false">{{ __('Address') }}</th>
-                            <th scope="col" data-field="contact" data-sortable="true" data-visible="false">{{ __('Contact') }}</th>
-                            <th scope="col" data-field="country" data-align="center" data-sortable="true" data-visible="true">{{ __('Country') }}</th>
-                            <th scope="col" data-field="state" data-align="center" data-sortable="true" data-visible="true">{{ __('State') }}</th>
-                            <th scope="col" data-field="city" data-align="center" data-sortable="true" data-visible="true">{{ __('City') }}</th>
-                            <th scope="col" data-field="featured_items" data-formatter="featuredFormatter" data-align="center">{{ __('Featured/Premium') }}</th>
-                            <th scope="col" data-field="status" data-align="center" data-sortable="true" data-filter-control="select" data-filter-data="" data-escape="false" data-formatter="itemStatusFormatter">{{ __('Status') }}</th>
-                            <th scope="col" data-field="rejected_reason" data-sortable="true" data-visible="true">{{ __('Rejected Reason') }}</th>
-                            <th scope="col" data-field="expiry_date" data-align="center" data-sortable="true">{{ __('Expiry Date') }}</th>
-                            <th scope="col" data-field="created_at" data-sortable="true" data-visible="false">{{ __('Created At') }}</th>
-                            <th scope="col" data-field="updated_at" data-sortable="true" data-visible="false">{{ __('Updated At') }}</th>
-                            <th scope="col" data-field="user_id" data-sortable="true" data-visible="false">{{ __('User ID') }}</th>
-                            <th scope="col" data-field="category_id" data-sortable="true" data-visible="false">{{ __('Category ID') }}</th>
-                            <th scope="col" data-field="likes" data-sortable="true" data-visible="false">{{ __('Likes') }}</th>
-                            <th scope="col" data-field="clicks" data-sortable="true" data-visible="false">{{ __('Clicks') }}</th>
-                            @canany(['item-update','item-delete'])
-                                <th scope="col" data-field="operate" data-align="center" data-sortable="false" data-events="itemEvents" data-escape="false">{{ __('Action') }}</th>
-                            @endcanany
-                        </tr>
-                        </thead>
-                    </table>
+                               data-toggle="table" data-url="{{ route('service.items.data') }}" data-click-to-select="true"
+                               data-side-pagination="server" data-pagination="true"
+                               data-page-list="[5, 10, 20, 50, 100, 200]" data-search="true"
+                               data-show-columns="true" data-show-refresh="true" data-fixed-columns="true"
+                               data-fixed-number="1" data-fixed-right-number="1" data-trim-on-search="false"
+                               data-escape="true"
+                               data-responsive="true" data-sort-name="id" data-sort-order="desc"
+                               data-pagination-successively-size="3" data-table="items" data-status-column="deleted_at"
+                               data-show-export="true"
+                               data-export-options='{"fileName": "service-item-list","ignoreColumn": ["operate"]}'
+                               data-export-types="['pdf','json', 'xml', 'csv', 'txt', 'sql', 'doc', 'excel']"
+                               data-mobile-responsive="true" data-filter-control="true" data-filter-control-container="#filters" data-toolbar="#filters">
+                            <thead class="thead-dark">
+                            <tr>
+                                <th scope="col" data-field="id" data-align="center" data-sortable="true">{{ __('ID') }}</th>
+                                <th scope="col" data-field="name" data-align="center" data-sortable="true">{{ __('Name') }}</th>
+                                <th scope="col" data-field="description" data-align="center" data-sortable="true" data-formatter="descriptionFormatter">{{ __('Description') }}</th>
+                                <th scope="col" data-field="user.name" data-align="center" data-sort-name="user_name" data-sortable="true">{{ __('User') }}</th>
+                                <th scope="col" data-field="category.name" data-align="center" data-sort-name="category_name" data-sortable="true">{{ __('Category') }}</th>
+                                <th scope="col" data-field="price" data-align="center" data-sortable="true">{{ __('Price') }}</th>
+                                <th scope="col" data-field="image" data-align="center" data-sortable="false" data-escape="false" data-formatter="imageFormatter">{{ __('Image') }}</th>
+                                <th scope="col" data-field="gallery_images" data-align="center" data-sortable="false" data-formatter="galleryImageFormatter" data-escape="false">{{ __('Other Images') }}</th>
+                                <th scope="col" data-field="latitude" data-sortable="true" data-visible="false">{{ __('Latitude') }}</th>
+                                <th scope="col" data-field="longitude" data-sortable="true" data-visible="false">{{ __('Longitude') }}</th>
+                                <th scope="col" data-field="address" data-sortable="true" data-visible="false">{{ __('Address') }}</th>
+                                <th scope="col" data-field="contact" data-sortable="true" data-visible="false">{{ __('Contact') }}</th>
+                                <th scope="col" data-field="country" data-align="center" data-sortable="true" data-visible="true">{{ __('Country') }}</th>
+                                <th scope="col" data-field="state" data-align="center" data-sortable="true" data-visible="true">{{ __('State') }}</th>
+                                <th scope="col" data-field="city" data-align="center" data-sortable="true" data-visible="true">{{ __('City') }}</th>
+                                <th scope="col" data-field="featured_items" data-formatter="featuredFormatter" data-align="center">{{ __('Featured/Premium') }}</th>
+                                
+                                <!-- SPECIAL TAGS COLUMN -->
+                                <th scope="col"
+                                    data-field="special_tags"
+                                    data-align="center"
+                                    data-sortable="true"
+                                    data-formatter="specialTagsFormatter">
+                                    {{ __('Special Tags') }}
+                                </th>
+                                
+                                <th scope="col" data-field="status" data-align="center" data-sortable="true" data-filter-control="select" data-filter-data="" data-escape="false" data-formatter="itemStatusFormatter">{{ __('Status') }}</th>
+                                <th scope="col" data-field="rejected_reason" data-sortable="true" data-visible="true">{{ __('Rejected Reason') }}</th>
+                                <th scope="col" data-field="expiry_date" data-align="center" data-sortable="true">{{ __('Expiry Date') }}</th>
+                                <th scope="col" data-field="created_at" data-sortable="true" data-visible="false">{{ __('Created At') }}</th>
+                                <th scope="col" data-field="updated_at" data-sortable="true" data-visible="false">{{ __('Updated At') }}</th>
+                                <th scope="col" data-field="user_id" data-sortable="true" data-visible="false">{{ __('User ID') }}</th>
+                                <th scope="col" data-field="category_id" data-sortable="true" data-visible="false">{{ __('Category ID') }}</th>
+                                <th scope="col" data-field="likes" data-sortable="true" data-visible="false">{{ __('Likes') }}</th>
+                                <th scope="col" data-field="clicks" data-sortable="true" data-visible="false">{{ __('Clicks') }}</th>
+                                @canany(['item-update','item-delete'])
+                                    <th scope="col" data-field="operate" data-align="center" data-sortable="false" data-events="itemEvents" data-escape="false">{{ __('Action') }}</th>
+                                @endcanany
+                            </tr>
+                            </thead>
+                        </table>
                     </div>
                 </div>
             </div>
         </div>
+        
+        <!-- Item details modal -->
         <div id="editModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel1"
              aria-hidden="true">
             <div class="modal-dialog">
@@ -95,6 +110,8 @@
             </div>
             <!-- /.modal-content -->
         </div>
+        
+        <!-- Status change modal -->
         <div id="editStatusModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel1"
              aria-hidden="true">
             <div class="modal-dialog">
@@ -141,6 +158,100 @@
         return '-';
     }
     
+    // Simpler special tags formatter that handles HTML entities properly
+    function specialTagsFormatter(value, row) {
+        if (!value) return '-';
+        
+        try {
+            // Decode HTML entities first, regardless of the format
+            let decodedValue = decodeHtmlEntities(value);
+            
+            // Try to parse as JSON if it looks like a JSON string
+            let tags = {};
+            if (typeof decodedValue === 'string') {
+                if (decodedValue.trim().startsWith('{') && decodedValue.includes(':')) {
+                    try {
+                        // Fix JSON format issues
+                        let fixedJson = decodedValue
+                            .replace(/'/g, '"')  // Replace single quotes with double quotes
+                            .replace(/([{,])\s*([a-zA-Z0-9_]+)\s*:/g, '$1"$2":');  // Quote unquoted keys
+                            
+                        tags = JSON.parse(fixedJson);
+                    } catch (e) {
+                        console.log("JSON parse error:", e);
+                        // Fall back to direct string formatting if parsing fails
+                        return formatTagString(decodedValue);
+                    }
+                } else {
+                    // Not a JSON object, format directly
+                    return formatTagString(decodedValue);
+                }
+            } else if (typeof decodedValue === 'object') {
+                tags = decodedValue;
+            }
+            
+            // Format object tags
+            if (typeof tags === 'object' && !Array.isArray(tags) && tags !== null) {
+                let html = '<div style="text-align: left;">';
+                
+                for (let key in tags) {
+                    // Format the key (convert snake_case to Title Case)
+                    let formattedKey = key
+                        .replace(/_/g, ' ')
+                        .replace(/\b\w/g, c => c.toUpperCase());
+                    
+                    // Format the value
+                    let formattedValue = '';
+                    if (tags[key] === "true" || tags[key] === true) {
+                        formattedValue = 'True';
+                    } else if (tags[key] === "false" || tags[key] === false) {
+                        formattedValue = 'False';
+                    } else {
+                        formattedValue = tags[key];
+                    }
+                    
+                    // Add this tag to the output with clear labeling
+                    html += '<div class="mb-1">' + formattedKey + ': ' + formattedValue + '</div>';
+                }
+                
+                html += '</div>';
+                return html || '-';
+            }
+            
+            // Fallback
+            return formatTagString(decodedValue);
+            
+        } catch (e) {
+            console.error("Error formatting special tags:", e);
+            return typeof value === 'string' ? formatTagString(value) : String(value);
+        }
+    }
+    
+    // Helper to decode HTML entities
+    function decodeHtmlEntities(text) {
+        if (typeof text !== 'string') return text;
+        
+        let tempDiv = document.createElement('div');
+        tempDiv.innerHTML = text;
+        return tempDiv.textContent || tempDiv.innerText || text;
+    }
+    
+    // Format a tag string directly (not as JSON)
+    function formatTagString(str) {
+        if (typeof str !== 'string') return String(str);
+        
+        let formatted = str
+            .replace(/[{}"]/g, '')  // Remove JSON syntax
+            .replace(/&quot;/g, '')  // Remove HTML quotes
+            .replace(/,/g, '<br>')   // Replace commas with line breaks
+            .replace(/:/g, ': ')     // Add space after colons
+            .replace(/_/g, ' ')      // Replace underscores with spaces
+            .replace(/\b\w/g, c => c.toUpperCase());  // Title case words
+            
+        // Wrap in a div with left alignment
+        return '<div style="text-align: left;">' + formatted + '</div>';
+    }
+
     function galleryImageFormatter(value, row) {
         if (value && value.length > 0) {
             let html = '';
@@ -208,11 +319,11 @@
             var url = form.attr('action');
             var formData = form.serialize();
             
-            // Log for debugging
             console.log('Form action:', url);
             console.log('Form data:', formData);
             
             $('#status-error-message').hide();
+            
             
             $.ajax({
                 url: url,
@@ -307,4 +418,4 @@
         }
     };
 </script>
-@endsection 
+@endsection

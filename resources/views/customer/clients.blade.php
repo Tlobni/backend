@@ -46,6 +46,7 @@
                                          <th scope="col" data-field="gender" data-sortable="true">{{ __('Gender') }}</th>
                                          <th scope="col" data-field="location" data-sortable="true">{{ __('Location') }}</th>
                                          <th scope="col" data-field="is_verified" data-formatter="verifiedFormatter" data-sortable="true">{{ __('Verified') }}</th>
+                                         <th scope="col" data-field="has_active_package" data-formatter="packageFormatter" data-sortable="true">{{ __('Active Package') }}</th>
                                          <th scope="col" data-field="status" data-formatter="statusSwitchFormatter" data-sortable="false">{{ __('Status') }}</th>
                                          <th scope="col" data-field="operate" data-escape="false" data-align="center" data-sortable="false" data-events="userEvents">{{ __('Action') }}</th>
                                      </tr>
@@ -200,6 +201,27 @@
         };
     }
     
+    // Formatter for package status
+    function packageFormatter(value, row) {
+        if (value) {
+            let packageInfo = row.active_package_name || 'Active Package';
+            let badgeClass = 'bg-success';
+            let expiryInfo = '';
+            
+            if (row.active_package_expiry) {
+                const expiryDate = new Date(row.active_package_expiry);
+                const formattedDate = expiryDate.toLocaleDateString();
+                expiryInfo = ' (Expires: ' + formattedDate + ')';
+            } else {
+                expiryInfo = ' (Unlimited)';
+            }
+            
+            return '<span class="badge ' + badgeClass + '">' + packageInfo + expiryInfo + '</span>';
+        } else {
+            return '<span class="badge bg-secondary">{{ __("No Package") }}</span>';
+        }
+    }
+    
     // Formatter for verified status
     function verifiedFormatter(value, row) {
         if (value === 1) {
@@ -276,6 +298,18 @@
         }
     };
     
+    // Global success function for package assignment
+    function assignApprovalSuccess() {
+        $('#assignPackageModal').modal('hide');
+        $('#userTable').bootstrapTable('refresh');
+    }
+    
+    function resetModal() {
+        const modal = $('#assignPackageModal');
+        const form = modal.find('form');
+        form[0].reset();
+    }
+    
     $(document).ready(function () {
         // Initialize the table
         $('#userTable').bootstrapTable();
@@ -330,20 +364,14 @@
             });
         });
         
-        // Assign Package Modal functionality
-        function assignApprovalSuccess() {
-            $('#assignPackageModal').modal('hide');
-        }
-        
-        function resetModal() {
-            const modal = $('#assignPackageModal');
-            const form = modal.find('form');
-            form[0].reset();
-        }
-        
         // Handle assign package button click
         $(document).on('click', '.assign_package', function(e) {
-            const userId = $(this).closest('td').data('id') || $(this).data('id');
+            // Try to get userId from different sources
+            const userId = $(this).data('id') || 
+                          $(this).closest('tr').find('td[data-index="id"]').text() || 
+                          $(this).closest('td').data('id');
+            
+            console.log('Setting user_id to:', userId); // Debug log
             $('#user_id').val(userId);
         });
         

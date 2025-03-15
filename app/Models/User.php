@@ -108,6 +108,12 @@ class User extends Authenticatable
     {
         return $this->hasMany(UserFcmToken::class);
     }
+
+    public function user_purchased_packages()
+    {
+        return $this->hasMany(UserPurchasedPackage::class);
+    }
+
     public function getStatusAttribute($value)
     {
         if ($this->deleted_at) {
@@ -118,6 +124,7 @@ class User extends Authenticatable
         }
         return $value;
     }
+
     public function getAutoApproveItemAttribute($value)
     {
         if ($this->is_verified == 1) {
@@ -125,6 +132,7 @@ class User extends Authenticatable
         }
         return $value;
     }
+
     public function setIsVerifiedAttribute($value)
     {
         $this->attributes['is_verified'] = $value;
