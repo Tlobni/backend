@@ -1500,13 +1500,17 @@ class ApiController extends Controller
                 ResponseService::errorResponse("You already have applied for this package");
             }
             
+            // Use the payment method from request and generate a unique order ID
+            $paymentGateway = $request->payment_method ?? 'cash';
+            $uniqueOrderId = 'order_' . uniqid() . '_' . time();
+            
             //Add Payment Data to Payment Transactions Table
             $paymentTransactionData = PaymentTransaction::create([
                 'user_id'         => Auth::user()->id,
                 'amount'          => $package->final_price,
-                'payment_gateway' => '',
-                'payment_status'  => '',
-                'order_id'        => '' // Generate a unique  payment reference
+                'payment_gateway' => $paymentGateway,
+                'payment_status'  => 'pending',
+                'order_id'        => $uniqueOrderId // Generate a unique payment reference
             ]);
 
             // Create a simple payment intent response for the client
@@ -1514,8 +1518,8 @@ class ApiController extends Controller
                 'id' => $paymentTransactionData->order_id,
                 'amount' => $package->final_price,
                 'currency' => 'USD', // You may want to adjust this based on your default currency
-                'status' => '',
-                'payment_method' => ''
+                'status' => 'pending',
+                'payment_method' => $paymentGateway
             ];
 
             // Create user purchased package record immediately since it's a  transaction
