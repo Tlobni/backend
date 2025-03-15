@@ -381,7 +381,7 @@ class ApiController extends Controller
                 'start_date'  => Carbon::now(),
                 'total_limit' => $package->item_limit == "unlimited" ? null : $package->item_limit,
                 'end_date'    => $package->duration == "unlimited" ? null : Carbon::now()->addDays($package->duration),
-                'status'      => 0  // Changed from 0 to 1 to auto-approve
+                'status'      => 0  
             ]);
             ResponseService::successResponse('Package has been successfully assigned to your account.');
         } catch (Throwable $th) {
@@ -1505,8 +1505,8 @@ class ApiController extends Controller
                 'user_id'         => Auth::user()->id,
                 'amount'          => $package->final_price,
                 'payment_gateway' => 'cash',
-                'payment_status'  => 'succeed', // Automatically mark as successful for cash payments
-                'order_id'        => 'cash-' . uniqid() // Generate a unique cash payment reference
+                'payment_status'  => '',
+                'order_id'        => '' // Generate a unique cash payment reference
             ]);
 
             // Create a simple payment intent response for the client
@@ -1514,7 +1514,7 @@ class ApiController extends Controller
                 'id' => $paymentTransactionData->order_id,
                 'amount' => $package->final_price,
                 'currency' => 'USD', // You may want to adjust this based on your default currency
-                'status' => 'succeed',
+                'status' => '',
                 'payment_method' => 'cash'
             ];
 
@@ -1526,7 +1526,7 @@ class ApiController extends Controller
                 'end_date'                => $package->duration == "unlimited" ? null : Carbon::now()->addDays($package->duration),
                 'total_limit'             => $package->item_limit == "unlimited" ? null : $package->item_limit,
                 'used_limit'              => 0,
-                'status'                  => 1,
+                'status'                  => 0,
                 'payment_transactions_id' => $paymentTransactionData->id,
             ]);
 
