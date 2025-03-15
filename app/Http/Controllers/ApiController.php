@@ -1504,9 +1504,9 @@ class ApiController extends Controller
             $paymentTransactionData = PaymentTransaction::create([
                 'user_id'         => Auth::user()->id,
                 'amount'          => $package->final_price,
-                'payment_gateway' => 'cash',
+                'payment_gateway' => '',
                 'payment_status'  => '',
-                'order_id'        => '' // Generate a unique cash payment reference
+                'order_id'        => '' // Generate a unique  payment reference
             ]);
 
             // Create a simple payment intent response for the client
@@ -1515,10 +1515,10 @@ class ApiController extends Controller
                 'amount' => $package->final_price,
                 'currency' => 'USD', // You may want to adjust this based on your default currency
                 'status' => '',
-                'payment_method' => 'cash'
+                'payment_method' => ''
             ];
 
-            // Create user purchased package record immediately since it's a cash transaction
+            // Create user purchased package record immediately since it's a  transaction
             UserPurchasedPackage::create([
                 'user_id'                 => Auth::user()->id,
                 'package_id'              => $request->package_id,
@@ -1527,13 +1527,13 @@ class ApiController extends Controller
                 'total_limit'             => $package->item_limit == "unlimited" ? null : $package->item_limit,
                 'used_limit'              => 0,
                 'status'                  => 0,
-                'payment_transactions_id' => $paymentTransactionData->id,
+                'payment_transactions_id' => '',
             ]);
 
             // Custom Array to Show as response
             $paymentGatewayDetails = array(
                 ...$paymentIntent,
-                'payment_transaction_id' => $paymentTransactionData->id,
+                'payment_transaction_id' => '',
             );
 
             DB::commit();
