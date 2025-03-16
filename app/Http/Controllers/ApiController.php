@@ -1864,11 +1864,13 @@ class ApiController extends Controller
                 ResponseService::errorResponse("You already have applied for this package");
             }
 
+            $uniqueOrderId = 'order_' . uniqid() . '_' . time();
+
             PaymentTransaction::create([
                 'user_id'         => Auth::user()->id,
                 'amount'          => $package->final_price,
                 'payment_gateway' => $request->payment_method,
-                'order_id'        => $request->purchase_token,
+                'order_id'        => $uniqueOrderId,
                 'payment_status'  => 'success',
             ]);
 
