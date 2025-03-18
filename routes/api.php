@@ -57,6 +57,12 @@ Route::group(['middleware' => ['auth:sanctum']], static function () {
     Route::get('my-review', [ApiController::class, 'getMyReview']);
     Route::post('add-review-report', [ApiController::class, 'addReviewReport']);
 
+    // New review endpoints
+    Route::post('add-user-review', [ApiController::class, 'addUserReview']);
+    Route::post('add-service-review', [ApiController::class, 'addServiceReview']);
+    Route::get('user-review', [ApiController::class, 'getUserReview']);
+    Route::get('item-review', [ApiController::class, 'getItemReview']);
+
     Route::get('verification-fields', [ApiController::class, 'getVerificationFields']);
     Route::post('send-verification-request',[ApiController::class,'sendVerificationRequest']);
     Route::get('verification-request',[ApiController::class,'getVerificationRequest']);
@@ -89,4 +95,3 @@ Route::get('areas', [ApiController::class, 'getAreas']);
 Route::post('contact-us', [ApiController::class, 'storeContactUs']);
 Route::get('seo-settings', [ApiController::class, 'seoSettings']);
 Route::get('get-seller', [ApiController::class, 'getSeller']);
-

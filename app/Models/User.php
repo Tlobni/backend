@@ -83,6 +83,26 @@ class User extends Authenticatable
         return $this->hasMany(SellerRating::class, 'seller_id');
     }
 
+    public function userReviews()
+    {
+        return $this->hasMany(UserReview::class, 'user_id');
+    }
+
+    public function reviewsWritten()
+    {
+        return $this->hasMany(UserReview::class, 'reviewer_id');
+    }
+
+    public function serviceReviews()
+    {
+        return $this->hasMany(ServiceReview::class, 'user_id');
+    }
+
+    public function serviceReviewsWritten()
+    {
+        return $this->hasMany(ServiceReview::class, 'reviewer_id');
+    }
+
     public function scopeSearch($query, $search)
     {
         $search = "%" . $search . "%";

@@ -96,6 +96,11 @@ class Item extends Model {
     public function review() {
         return $this->hasMany(SellerRating::class);
     }
+
+    public function serviceReviews() {
+        return $this->hasMany(ServiceReview::class, 'service_id');
+    }
+
     // Accessors
     public function getImageAttribute($image) {
         return !empty($image) ? url(Storage::url($image)) : $image;

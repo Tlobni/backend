@@ -41,6 +41,8 @@ use App\Models\VerificationField;
 use App\Models\VerificationFieldRequest;
 use App\Models\VerificationFieldValue;
 use App\Models\VerificationRequest;
+use App\Models\UserReview;
+use App\Models\ServiceReview;
 use App\Services\CachingService;
 use App\Services\FileService;
 use App\Services\HelperService;
@@ -234,6 +236,7 @@ class ApiController extends Controller
                 'country_code'          => 'nullable|string',
                 'gender'                => 'nullable|in:Male,Female,Other',
                 'location'              => 'nullable|string',
+                'country'               => 'nullable|string', // Keep for backward compatibility
                 'userType'              => 'nullable|in:Provider,Client',
                 'providerType'          => 'nullable|in:Expert,Business',
                 'businessName'          => 'nullable|string',
@@ -247,7 +250,6 @@ class ApiController extends Controller
             }
 
             $app_user = Auth::user();
-            //Email should not be updated when type is google.
             $data = $app_user->type == "google" ? $request->except('email') : $request->all();
 
             // Map fullName to name if provided
@@ -255,13 +257,20 @@ class ApiController extends Controller
                 $data['name'] = $request->fullName;
             }
             
-            // Map phone to mobile if provided
             if (!empty($request->phone)) {
                 $data['mobile'] = $request->phone;
             }
+
+            if (isset($request->categories)) {
+                $data['categories'] = $request->categories;
+            }
+
+            if (isset($request->country)) {
+                $data['location'] = $request->country;
+                unset($data['country']); 
+            }
             
             if ($request->hasFile('profile')) {
-                // Get original profile value
                 $originalProfile = DB::table('users')->where('id', $app_user->id)->value('profile');
                 $data['profile'] = FileService::compressAndReplace($request->file('profile'), 'profile', $originalProfile);
             }
@@ -277,34 +286,27 @@ class ApiController extends Controller
 
             // Handle role changes if userType is provided
             if (!empty($request->userType)) {
-                // Get user model directly - as Auth::user() doesn't always load the trait properly
                 $user = User::find($app_user->id);
                 
                 if ($request->userType === 'Provider') {
                     if ($request->providerType === 'Expert') {
                         $user->syncRoles(['Expert']);
-                        // Also update provider_type in the database
                         $data['provider_type'] = 'Expert';
                     } elseif ($request->providerType === 'Business') {
                         $user->syncRoles(['Business']);
-                        // Also update provider_type in the database
                         $data['provider_type'] = 'Business';
                     }
                 } else {
                     // Assign "Client" role for non-providers
                     $user->syncRoles(['Client']);
-                    // Clear provider_type if changing to Client
                     $data['provider_type'] = null;
                 }
             }
 
-            // Update user data
             DB::table('users')->where('id', $app_user->id)->update($data);
 
-            // Get updated user
             $updatedUser = User::find($app_user->id);
             
-            // Include the user's role
             $updatedUser->getRoleNames()->first();
 
             ResponseService::successResponse("Profile Updated Successfully", $updatedUser);
@@ -623,6 +625,7 @@ class ApiController extends Controller
 
     public function getItem(Request $request)
     {
+        Log::info('getItem called with parameters:', $request->all());
         $validator = Validator::make($request->all(), [
             'limit'         => 'nullable|integer',
             'offset'        => 'nullable|integer',
@@ -633,219 +636,112 @@ class ApiController extends Controller
             'min_price'     => 'nullable',
             'max_price'     => 'nullable',
             'sort_by'       => 'nullable|in:new-to-old,old-to-new,price-high-to-low,price-low-to-high,popular_items',
-            'posted_since'  => 'nullable|in:all-time,today,within-1-week,within-2-week,within-1-month,within-3-month'
+            'posted_since'  => 'nullable|in:all-time,today,within-1-week,within-2-week,within-1-month,within-3-month',
+            'service_type'  => 'nullable|in:exclusive_experience,service',
         ]);
 
         if ($validator->fails()) {
             ResponseService::validationError($validator->errors()->first());
         }
+        
         try {
-            //TODO : need to simplify this whole module
-            $sql = Item::with('user:id,name,email,mobile,profile,created_at,is_verified,show_personal_details,country_code', 'category:id,name,image', 'gallery_images:id,image,item_id', 'featured_items', 'favourites', 'item_custom_field_values.custom_field', 'area:id,name')
+            // Start with a query builder including all necessary relations
+            $sql = Item::with('user:id,name,email,mobile,profile,created_at,is_verified,show_personal_details,country_code', 
+                            'category:id,name,image', 
+                            'gallery_images:id,image,item_id', 
+                            'featured_items', 
+                            'favourites', 
+                            'item_custom_field_values.custom_field', 
+                            'area:id,name')
                 ->withCount('favourites')
                 ->select('items.*')
-                ->when($request->id, function ($sql) use ($request) {
-                    $sql->where('id', $request->id);
-                })->when(($request->category_id), function ($sql) use ($request) {
-                    $category = Category::where('id', $request->category_id)->with('children')->get();
-                    $categoryIDS = HelperService::findAllCategoryIds($category);
-                    return $sql->whereIn('category_id', $categoryIDS);
-                })->when(($request->category_slug), function ($sql) use ($request) {
-                    $category = Category::where('slug', $request->category_slug)->with('children')->get();
-                    $categoryIDS = HelperService::findAllCategoryIds($category);
-                    return $sql->whereIn('category_id', $categoryIDS);
-                })->when((isset($request->min_price) || isset($request->max_price)), function ($sql) use ($request) {
-                    $min_price = $request->min_price ?? 0;
-                    $max_price = $request->max_price ?? Item::max('price');
-                    return $sql->whereBetween('price', [$min_price, $max_price]);
-                })->when($request->posted_since, function ($sql) use ($request) {
-                    return match ($request->posted_since) {
-                        "today" => $sql->whereDate('created_at', '>=', now()),
-                        "within-1-week" => $sql->whereDate('created_at', '>=', now()->subDays(7)),
-                        "within-2-week" => $sql->whereDate('created_at', '>=', now()->subDays(14)),
-                        "within-1-month" => $sql->whereDate('created_at', '>=', now()->subMonths()),
-                        "within-3-month" => $sql->whereDate('created_at', '>=', now()->subMonths(3)),
-                        default => $sql
-                    };
-                })->when($request->country, function ($sql) use ($request) {
-                    return $sql->where('country', $request->country);
-                })->when($request->state, function ($sql) use ($request) {
-                    return $sql->where('state', $request->state);
-                })->when($request->city, function ($sql) use ($request) {
-                    return $sql->where('city', $request->city);
-                })->when($request->area_id, function ($sql) use ($request) {
-                    return $sql->where('area_id', $request->area_id);
-                })->when($request->user_id, function ($sql) use ($request) {
-                    return $sql->where('user_id', $request->user_id);
-                })->when($request->slug, function ($sql) use ($request) {
-                    return $sql->where('slug', $request->slug);
-                })->when($request->latitude && $request->longitude && $request->radius, function ($sql) use ($request) {
-                    $latitude = $request->latitude;
-                    $longitude = $request->longitude;
-                    $radius = $request->radius;
+                ->where('status', 'approved')
+                ->whereNull('deleted_at');
 
-                    // Calculate distance using Haversine formula
-                    $haversine = "(6371 * acos(cos(radians($latitude))
-                                    * cos(radians(latitude))
-                                    * cos(radians(longitude)
-                                    - radians($longitude))
-                                    + sin(radians($latitude))
-                                    * sin(radians(latitude))))";
+            // Add non-expired filter
+            $sql->where(function($query) {
+                $query->where('expiry_date', '>', now())
+                    ->orWhereNull('expiry_date');
+            });
+            
+            // Basic filters
+            if ($request->filled('id')) {
+                $sql->where('id', $request->id);
+            }
+            
+            if ($request->filled('category_id')) {
+                $category = Category::where('id', $request->category_id)->with('children')->get();
+                if ($category->isNotEmpty()) {
+                    $categoryIDS = HelperService::findAllCategoryIds($category);
+                    if (!empty($categoryIDS)) {
+                        $sql->whereIn('category_id', $categoryIDS);
+                    }
+                }
+            }
+            
+            if ($request->filled('user_id')) {
+                $sql->where('user_id', $request->user_id);
+            }
+            
+            // Service type filter
+            if ($request->filled('service_type')) {
+                Log::info('Filtering by service_type: ' . $request->service_type);
+                
+                if ($request->service_type === 'exclusive_experience') {
+                    $sql->where('provider_item_type', 'experience');
+                } elseif ($request->service_type === 'service') {
+                    $sql->where(function($query) {
+                        $query->where('provider_item_type', 'service')
+                              ->orWhereNull('provider_item_type')
+                              ->orWhere('provider_item_type', '');
+                    });
+                }
+            }
+            
+            // Price filters
+            if ($request->filled('min_price') || $request->filled('max_price')) {
+                $min_price = $request->filled('min_price') ? $request->min_price : 0;
+                $max_price = $request->filled('max_price') ? $request->max_price : Item::max('price');
+                $sql->whereBetween('price', [$min_price, $max_price]);
+            }
+            
+            // Skip special_tags filtering to show all items
+            if ($request->filled('special_tags') && is_array($request->special_tags)) {
+                Log::info('Special tags in request, but ignoring for filtering to show all items:', $request->special_tags);
+            }
 
-                    $sql->select('items.*')
-                        ->selectRaw("{$haversine} AS distance")
-                        ->withCount('favourites')
-                        ->where('latitude', '!=', 0)
-                        ->where('longitude', '!=', 0)
-                        ->having('distance', '<', $radius)
-                        ->orderBy('distance', 'asc');
+            // Get counts and results
+            $count = $sql->count();
+            Log::info('Total item count before pagination: ' . $count);
+            
+            $result = $request->filled('id') ? $sql->get() : $sql->paginate();
+            Log::info('Result count: ' . $result->count());
+
+            // Transform results to add properties
+            if ($result instanceof \Illuminate\Pagination\LengthAwarePaginator || $result instanceof \Illuminate\Database\Eloquent\Collection) {
+                $result->transform(function ($item) {
+                    // Add service_type based on provider_item_type
+                    $item->service_type = $this->determineServiceType($item);
+                    
+                    // Add user_type if user relation is loaded
+                    if ($item->relationLoaded('user') && $item->user) {
+                        $item->user_type = $this->determineUserType($item->user);
+                    }
+                    
+                    // Process special_tags for display
+                    $item->special_tags = $this->determineSpecialTags($item);
+                    
+                    return $item;
                 });
-
-
-            //            // Other users should only get approved items
-            //            if (!Auth::check()) {
-            //                $sql->where('status', 'approved');
-            //            }
-
-            // Sort By
-            if ($request->sort_by == "new-to-old") {
-                $sql->orderBy('id', 'DESC');
-            } elseif ($request->sort_by == "old-to-new") {
-                $sql->orderBy('id', 'ASC');
-            } elseif ($request->sort_by == "price-high-to-low") {
-                $sql->orderBy('price', 'DESC');
-            } elseif ($request->sort_by == "price-low-to-high") {
-                $sql->orderBy('price', 'ASC');
-            } elseif ($request->sort_by == "popular_items") {
-                $sql->orderBy('clicks', 'DESC');
-            } else {
-                $sql->orderBy('id', 'DESC');
             }
-
-            // Status
-            if (!empty($request->status)) {
-                if (in_array($request->status, array('review', 'approved', 'rejected', 'sold out'))) {
-                    $sql->where('status', $request->status);
-                } elseif ($request->status == 'inactive') {
-                    //If status is inactive then display only trashed items
-                    $sql->onlyTrashed();
-                } elseif ($request->status == 'featured') {
-                    //If status is featured then display only featured items
-                    $sql->where('status', 'approved')->has('featured_items');
-                }
-            }
-
-            // Feature Section Filtration
-            if (!empty($request->featured_section_id) || !empty($request->featured_section_slug)) {
-                if (!empty($request->featured_section_id)) {
-                    $featuredSection = FeatureSection::findOrFail($request->featured_section_id);
-                } else {
-                    $featuredSection = FeatureSection::where('slug', $request->featured_section_slug)->firstOrFail();
-                }
-                $sql = match ($featuredSection->filter) {
-                    /*Note : Reorder function is used to clear out the previously applied order by statement*/
-                    "price_criteria" => $sql->whereBetween('price', [$featuredSection->min_price, $featuredSection->max_price]),
-                    "most_viewed" => $sql->reorder()->orderBy('clicks', 'DESC'),
-                    "category_criteria" => (static function () use ($featuredSection, $sql) {
-                        $category = Category::whereIn('id', explode(',', $featuredSection->value))->with('children')->get();
-                        $categoryIDS = HelperService::findAllCategoryIds($category);
-                        return $sql->whereIn('category_id', $categoryIDS);
-                    })(),
-
-                    //Added withCount here 2nd time because of some wierd issue
-                    "most_liked" => $sql->reorder()->withCount('favourites')->orderBy('favourites_count', 'DESC'),
-                };
-            }
-
-
-            if (!empty($request->search)) {
-                $sql->search($request->search);
-            }
-            function removeBackslashesRecursive($data)
-            {
-                $cleaned = [];
-                foreach ($data as $key => $value) {
-                    $cleanKey = stripslashes($key);
-                    if (is_array($value)) {
-                        $cleaned[$cleanKey] = removeBackslashesRecursive($value);
-                    } else {
-                        $cleaned[$cleanKey] = stripslashes($value);
-                    }
-                }
-                return $cleaned;
-            }
-            $cleanedParameters = removeBackslashesRecursive($request->all());
-            if (!empty($cleanedParameters['custom_fields'])) {
-                $customFields = $cleanedParameters['custom_fields'];
-                foreach ($customFields as $customFieldId => $value) {
-                    if (is_array($value)) {
-                        foreach ($value as $arrayValue) {
-                            $sql->join('item_custom_field_values as cf' . $customFieldId, function ($join) use ($customFieldId) {
-                                $join->on('items.id', '=', 'cf' . $customFieldId . '.item_id');
-                            })
-                                ->where('cf' . $customFieldId . '.custom_field_id', $customFieldId)
-                                ->where('cf' . $customFieldId . '.value', 'LIKE', '%' . trim($arrayValue) . '%');
-                        }
-                    } else {
-                        $sql->join('item_custom_field_values as cf' . $customFieldId, function ($join) use ($customFieldId) {
-                            $join->on('items.id', '=', 'cf' . $customFieldId . '.item_id');
-                        })
-                            ->where('cf' . $customFieldId . '.custom_field_id', $customFieldId)
-                            ->where('cf' . $customFieldId . '.value', 'LIKE', '%' . trim($value) . '%');
-                    }
-                }
-                $sql->whereHas('item_custom_field_values', function ($query) use ($customFields) {
-                    $query->whereIn('custom_field_id', array_keys($customFields));
-                }, '=', count($customFields));
-            }
-
-
-            if (Auth::check()) {
-                $sql->with(['item_offers' => function ($q) {
-                    $q->where('buyer_id', Auth::user()->id);
-                }, 'user_reports'         => function ($q) {
-                    $q->where('user_id', Auth::user()->id);
-                }]);
-
-                $currentURI = explode('?', $request->getRequestUri(), 2);
-
-                if ($currentURI[0] == "/api/my-items") { //TODO: This if condition is temporary fix. Need something better
-                    $sql->where(['user_id' => Auth::user()->id])->withTrashed();
-                } else {
-                    $sql->where('status', 'approved')->has('user')->onlyNonBlockedUsers()->getNonExpiredItems();
-                }
-            } else {
-                //  Other users should only get approved items
-                $sql->where('status', 'approved')->getNonExpiredItems();
-            }
-            if (!empty($request->id)) {
-                /*
-                 * Collection does not support first OR find method's result as of now. It's a part of R&D
-                 * So currently using this shortcut method get() to fetch the first data
-                 */
-                $result = $sql->get();
-                if (count($result) == 0) {
-                    ResponseService::errorResponse("No item Found");
-                }
-            } else {
-                $result = $sql->paginate();
-            }
-            //                // Add three regular items
-            //                for ($i = 0; $i < 3 && $regularIndex < $regularItemCount; $i++) {
-            //                    $items->push($regularItems[$regularIndex]);
-            //                    $regularIndex++;
-            //                }
-            //
-            //                // Add one featured item if available
-            //                if ($featuredIndex < $featuredItemCount) {
-            //                    $items->push($featuredItems[$featuredIndex]);
-            //                    $featuredIndex++;
-            //                }
-            //            }
-            // Return success response with the fetched items
 
             ResponseService::successResponse("Item Fetched Successfully", new ItemCollection($result));
         } catch (Throwable $th) {
+            Log::error('Exception in getItem: ' . $th->getMessage(), [
+                'file' => $th->getFile(),
+                'line' => $th->getLine(),
+                'trace' => $th->getTraceAsString()
+            ]);
             ResponseService::logErrorResponse($th, "API Controller -> getItem");
             ResponseService::errorResponse();
         }
@@ -1805,8 +1701,12 @@ class ApiController extends Controller
             DB::commit();
             ResponseService::successResponse("Message Fetched Successfully", $chat, ['debug' => $notification]);
         } catch (Throwable $th) {
-            DB::rollBack();
-            ResponseService::logErrorResponse($th, "API Controller -> sendMessage");
+            Log::error('Exception in getItem: ' . $th->getMessage(), [
+                'file' => $th->getFile(),
+                'line' => $th->getLine(),
+                'trace' => $th->getTraceAsString()
+            ]);
+            ResponseService::logErrorResponse($th, "API Controller -> getItem");
             ResponseService::errorResponse();
         }
     }
@@ -2460,4 +2360,256 @@ class ApiController extends Controller
             ResponseService::errorResponse();
         }
     }
+
+    /**
+     * Add review for a user/expert/business
+     */
+    public function addUserReview(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|integer|exists:users,id',
+            'ratings' => 'required|numeric|between:1,5',
+            'review'  => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            ResponseService::validationError($validator->errors()->first());
+        }
+
+        try {
+            // Check if the user is trying to review themselves
+            if ($request->user_id == Auth::id()) {
+                ResponseService::errorResponse("You cannot review yourself.");
+            }
+
+            // Check if the user has already reviewed this user
+            $existingReview = UserReview::where('user_id', $request->user_id)
+                                        ->where('reviewer_id', Auth::id())
+                                        ->first();
+            
+            if ($existingReview) {
+                ResponseService::errorResponse("You have already reviewed this user.");
+            }
+
+            // Create the review
+            $review = UserReview::create([
+                'user_id'     => $request->user_id,
+                'reviewer_id' => Auth::id(),
+                'ratings'     => $request->ratings,
+                'review'      => $request->review,
+            ]);
+
+            ResponseService::successResponse("Review submitted successfully.", $review);
+        } catch (Throwable $th) {
+            ResponseService::logErrorResponse($th, "API Controller -> addUserReview");
+            ResponseService::errorResponse();
+        }
+    }
+
+    /**
+     * Add review for a service/experience
+     */
+    public function addServiceReview(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'service_id' => 'required|integer|exists:items,id',
+            'user_id'    => 'required|integer|exists:users,id',
+            'ratings'    => 'required|numeric|between:1,5',
+            'review'     => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            ResponseService::validationError($validator->errors()->first());
+        }
+
+        try {
+            // Verify the item exists and belongs to the specified user
+            $item = Item::findOrFail($request->service_id);
+            
+            if ($item->user_id != $request->user_id) {
+                ResponseService::errorResponse("The specified service does not belong to the specified user.");
+            }
+
+            // Check if the user is trying to review their own service
+            if ($request->user_id == Auth::id()) {
+                ResponseService::errorResponse("You cannot review your own service.");
+            }
+
+            // Check if the user has already reviewed this service
+            $existingReview = ServiceReview::where('service_id', $request->service_id)
+                                           ->where('reviewer_id', Auth::id())
+                                           ->first();
+            
+            if ($existingReview) {
+                ResponseService::errorResponse("You have already reviewed this service.");
+            }
+
+            // Create the review
+            $review = ServiceReview::create([
+                'service_id'  => $request->service_id,
+                'user_id'     => $request->user_id,
+                'reviewer_id' => Auth::id(),
+                'ratings'     => $request->ratings,
+                'review'      => $request->review,
+            ]);
+
+            ResponseService::successResponse("Review submitted successfully.", $review);
+        } catch (Throwable $th) {
+            ResponseService::logErrorResponse($th, "API Controller -> addServiceReview");
+            ResponseService::errorResponse();
+        }
+    }
+
+    /**
+     * Get reviews for a specific item/service
+     */
+    public function getItemReview(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'service_id' => 'required|integer|exists:items,id',
+        ]);
+
+        if ($validator->fails()) {
+            ResponseService::validationError($validator->errors()->first());
+        }
+
+        try {
+            // Get all reviews for the specified item
+            $reviews = ServiceReview::where('service_id', $request->service_id)
+                                    ->with(['reviewer:id,name,profile'])
+                                    ->paginate(10);
+            
+            // Calculate average rating
+            $averageRating = $reviews->avg('ratings');
+
+            $response = [
+                'reviews' => $reviews,
+                'average_rating' => $averageRating,
+            ];
+
+            Log::info($response);
+
+            ResponseService::successResponse("Reviews fetched successfully.", $response);
+        } catch (Throwable $th) {
+            ResponseService::logErrorResponse($th, "API Controller -> getItemReview");
+            ResponseService::errorResponse();
+        }
+    }
+
+    /**
+     * Get reviews for a specific user profile
+     */
+    public function getUserReview(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|integer|exists:users,id',
+        ]);
+
+        if ($validator->fails()) {
+            ResponseService::validationError($validator->errors()->first());
+        }
+
+        try {
+            // Get all reviews for the specified user
+            $reviews = UserReview::where('user_id', $request->user_id)
+                                 ->with(['reviewer:id,name,profile'])
+                                 ->paginate(10);
+            
+            // Calculate average rating
+            $averageRating = $reviews->avg('ratings');
+
+            $response = [
+                'reviews' => $reviews,
+                'average_rating' => $averageRating,
+            ];
+
+            ResponseService::successResponse("Success", $response);
+        } catch (Throwable $th) {
+            ResponseService::logErrorResponse($th, "API Controller -> getUserReview");
+            ResponseService::errorResponse();
+        }
+    }
+
+    /**
+     * Process special tags for display
+     */
+    private function determineSpecialTags($item)
+    {
+        Log::info("Processing special_tags for item {$item->id}");
+        
+        // Return empty object if no special tags
+        if (!isset($item->special_tags) || empty($item->special_tags)) {
+            Log::info("No special_tags found for item {$item->id}, returning empty array");
+            return [];
+        }
+        
+        // Process special_tags value based on its type
+        try {
+            // If it's already an object or array
+            if (is_object($item->special_tags) || is_array($item->special_tags)) {
+                Log::info("Item {$item->id} special_tags is already an object/array");
+                $tags = (array)$item->special_tags;
+            } 
+            // If it's a string, try to decode it
+            else if (is_string($item->special_tags)) {
+                Log::info("Decoding JSON string for item {$item->id}: " . $item->special_tags);
+                // Try to decode as JSON
+                $decodedTags = json_decode($item->special_tags, true);
+                
+                // If decoding failed, try again by replacing escaped quotes
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    $cleaned = str_replace('\"', '"', $item->special_tags);
+                    $decodedTags = json_decode($cleaned, true);
+                }
+                
+                $tags = $decodedTags ?: [];
+            } else {
+                // Unknown type
+                Log::info("Special tags has unknown type: " . gettype($item->special_tags));
+                $tags = [];
+            }
+            
+            // Log the result
+            Log::info("Processed special_tags for item {$item->id}: ", ['tags' => $tags]);
+            
+            return $tags;
+        } catch (\Exception $e) {
+            Log::error("Error processing special_tags for item {$item->id}: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Determine the service type (service or exclusive experience)
+     */
+    private function determineServiceType($item)
+    {
+        // Check provider_item_type field
+        if (isset($item->provider_item_type) && $item->provider_item_type === 'experience') {
+            return 'exclusive_experience';
+        }
+        
+        // Default to regular service if no explicit type is found
+        return 'service';
+    }
+
+    /**
+     * Determine the user type (expert or business)
+     */
+    private function determineUserType($user)
+    {
+        if (!$user) {
+            return null;
+        }
+        
+        // Check if user has business profile or expert designation
+        if (isset($user->account_type) && $user->account_type === 'business') {
+            return 'business';
+        } elseif (isset($user->is_expert) && $user->is_expert) {
+            return 'expert';
+        }
+        
+        return 'regular';
+    }
 }
+            
