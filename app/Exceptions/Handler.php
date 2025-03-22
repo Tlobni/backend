@@ -61,7 +61,7 @@ class Handler extends ExceptionHandler
                 }
                 
                 // For web requests, render the custom 403 error page
-                return response()->view('errors.403', ['exception' => $e], 403);
+                // return response()->view('errors.403', ['exception' => $e], 403);
             }
         });
     }
