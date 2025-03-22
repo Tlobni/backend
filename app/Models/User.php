@@ -42,7 +42,8 @@ class User extends Authenticatable
         'gender',
         'location',
         'platform_type',
-        'provider_type'
+        'provider_type',
+        'status'
     ];
 
     /**
@@ -137,12 +138,13 @@ class User extends Authenticatable
     public function getStatusAttribute($value)
     {
         if ($this->deleted_at) {
-            return "inactive";
+            return 0;
         }
         if ($this->expiry_date && $this->expiry_date < Carbon::now()) {
-            return "expired";
+            return 0;
         }
-        return $value;
+        
+        return (isset($value) && $value) ? 1 : 0;
     }
 
     public function getAutoApproveItemAttribute($value)

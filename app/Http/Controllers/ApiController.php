@@ -68,9 +68,35 @@ class ApiController extends Controller
     public function __construct()
     {
         $this->uploadFolder = 'item_images';
-        // if (array_key_exists('HTTP_AUTHORIZATION', $_SERVER) && !empty($_SERVER['HTTP_AUTHORIZATION'])) {
-        // $this->middleware('auth:sanctum');
-        // }
+        
+        // Apply auth:sanctum and auth.status middleware to all methods except specific ones
+        $this->middleware(['auth:sanctum', 'auth.status'])->except([
+            'login', 
+            'userSignup', 
+            'getSystemSettings',
+            'getLanguages',
+            'getPackage',
+            'setItemTotalClick',
+            'appPaymentStatus',
+            'getCustomFields', 
+            'getItem',
+            'getSlider', 
+            'getReportReasons',
+            'getSubCategories',
+            'getParentCategoryTree',
+            'getFeaturedSection',
+            'getBlog',
+            'getAllBlogTags', 
+            'getFaqs',
+            'getTips',
+            'getCountries',
+            'getStates',
+            'getCities',
+            'getAreas',
+            'storeContactUs',
+            'seoSettings',
+            'getSeller',
+        ]);
     }
 
     public function login(Request $request)
@@ -80,12 +106,22 @@ class ApiController extends Controller
             'password' => 'required|min:6'
         ]);
 
-        $user = User::where('email', $request->email)->first();
+        $user = User::where('email', $request->email)->withTrashed()->first();
 
+        // Check if user exists and has correct password
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
                 'message' => 'Invalid credentials'
             ], 401);
+        }
+
+        // Check if the user account is disabled (has deleted_at set or status=0)
+        if ($user->deleted_at !== null || (isset($user->status) && (int)$user->status === 0)) {
+            return response()->json([
+                'error' => true,
+                'message' => 'Your account has been disabled. Please contact support.',
+                'code' => 403
+            ], 403);
         }
 
         // Generate Sanctum token
@@ -623,9 +659,7 @@ class ApiController extends Controller
         }
     }
 
-    public function getItem(Request $request)
-    {
-        Log::info('getItem called with parameters:', $request->all());
+    public function getItem(Request $request) {
         $validator = Validator::make($request->all(), [
             'limit'         => 'nullable|integer',
             'offset'        => 'nullable|integer',
@@ -636,112 +670,220 @@ class ApiController extends Controller
             'min_price'     => 'nullable',
             'max_price'     => 'nullable',
             'sort_by'       => 'nullable|in:new-to-old,old-to-new,price-high-to-low,price-low-to-high,popular_items',
-            'posted_since'  => 'nullable|in:all-time,today,within-1-week,within-2-week,within-1-month,within-3-month',
-            'service_type'  => 'nullable|in:exclusive_experience,service',
+            'posted_since'  => 'nullable|in:all-time,today,within-1-week,within-2-week,within-1-month,within-3-month'
         ]);
 
         if ($validator->fails()) {
             ResponseService::validationError($validator->errors()->first());
         }
-        
         try {
-            // Start with a query builder including all necessary relations
-            $sql = Item::with('user:id,name,email,mobile,profile,created_at,is_verified,show_personal_details,country_code', 
-                            'category:id,name,image', 
-                            'gallery_images:id,image,item_id', 
-                            'featured_items', 
-                            'favourites', 
-                            'item_custom_field_values.custom_field', 
-                            'area:id,name')
+            //TODO : need to simplify this whole module
+            $sql = Item::with('user:id,name,email,mobile,profile,created_at,is_verified,show_personal_details,country_code', 'category:id,name,image', 'gallery_images:id,image,item_id', 'featured_items', 'favourites', 'item_custom_field_values.custom_field', 'area:id,name')
                 ->withCount('favourites')
                 ->select('items.*')
-                ->where('status', 'approved')
-                ->whereNull('deleted_at');
-
-            // Add non-expired filter
-            $sql->where(function($query) {
-                $query->where('expiry_date', '>', now())
-                    ->orWhereNull('expiry_date');
-            });
-            
-            // Basic filters
-            if ($request->filled('id')) {
-                $sql->where('id', $request->id);
-            }
-            
-            if ($request->filled('category_id')) {
-                $category = Category::where('id', $request->category_id)->with('children')->get();
-                if ($category->isNotEmpty()) {
+                ->when($request->id, function ($sql) use ($request) {
+                    $sql->where('id', $request->id);
+                })->when(($request->category_id), function ($sql) use ($request) {
+                    $category = Category::where('id', $request->category_id)->with('children')->get();
                     $categoryIDS = HelperService::findAllCategoryIds($category);
-                    if (!empty($categoryIDS)) {
-                        $sql->whereIn('category_id', $categoryIDS);
-                    }
-                }
-            }
-            
-            if ($request->filled('user_id')) {
-                $sql->where('user_id', $request->user_id);
-            }
-            
-            // Service type filter
-            if ($request->filled('service_type')) {
-                Log::info('Filtering by service_type: ' . $request->service_type);
-                
-                if ($request->service_type === 'exclusive_experience') {
-                    $sql->where('provider_item_type', 'experience');
-                } elseif ($request->service_type === 'service') {
-                    $sql->where(function($query) {
-                        $query->where('provider_item_type', 'service')
-                              ->orWhereNull('provider_item_type')
-                              ->orWhere('provider_item_type', '');
-                    });
-                }
-            }
-            
-            // Price filters
-            if ($request->filled('min_price') || $request->filled('max_price')) {
-                $min_price = $request->filled('min_price') ? $request->min_price : 0;
-                $max_price = $request->filled('max_price') ? $request->max_price : Item::max('price');
-                $sql->whereBetween('price', [$min_price, $max_price]);
-            }
-            
-            // Skip special_tags filtering to show all items
-            if ($request->filled('special_tags') && is_array($request->special_tags)) {
-                Log::info('Special tags in request, but ignoring for filtering to show all items:', $request->special_tags);
-            }
+                    return $sql->whereIn('category_id', $categoryIDS);
+                })->when(($request->category_slug), function ($sql) use ($request) {
+                    $category = Category::where('slug', $request->category_slug)->with('children')->get();
+                    $categoryIDS = HelperService::findAllCategoryIds($category);
+                    return $sql->whereIn('category_id', $categoryIDS);
+                })->when((isset($request->min_price) || isset($request->max_price)), function ($sql) use ($request) {
+                    $min_price = $request->min_price ?? 0;
+                    $max_price = $request->max_price ?? Item::max('price');
+                    return $sql->whereBetween('price', [$min_price, $max_price]);
+                })->when($request->posted_since, function ($sql) use ($request) {
+                    return match ($request->posted_since) {
+                        "today" => $sql->whereDate('created_at', '>=', now()),
+                        "within-1-week" => $sql->whereDate('created_at', '>=', now()->subDays(7)),
+                        "within-2-week" => $sql->whereDate('created_at', '>=', now()->subDays(14)),
+                        "within-1-month" => $sql->whereDate('created_at', '>=', now()->subMonths()),
+                        "within-3-month" => $sql->whereDate('created_at', '>=', now()->subMonths(3)),
+                        default => $sql
+                    };
+                })->when($request->country, function ($sql) use ($request) {
+                    return $sql->where('country', $request->country);
+                })->when($request->state, function ($sql) use ($request) {
+                    return $sql->where('state', $request->state);
+                })->when($request->city, function ($sql) use ($request) {
+                    return $sql->where('city', $request->city);
+                })->when($request->area_id, function ($sql) use ($request) {
+                    return $sql->where('area_id', $request->area_id);
+                })->when($request->user_id, function ($sql) use ($request) {
+                    return $sql->where('user_id', $request->user_id);
+                })->when($request->slug, function ($sql) use ($request) {
+                    return $sql->where('slug', $request->slug);
+                })->when($request->latitude && $request->longitude && $request->radius, function ($sql) use ($request) {
+                    $latitude = $request->latitude;
+                    $longitude = $request->longitude;
+                    $radius = $request->radius;
 
-            // Get counts and results
-            $count = $sql->count();
-            Log::info('Total item count before pagination: ' . $count);
-            
-            $result = $request->filled('id') ? $sql->get() : $sql->paginate();
-            Log::info('Result count: ' . $result->count());
+                    // Calculate distance using Haversine formula
+                    $haversine = "(6371 * acos(cos(radians($latitude))
+                                    * cos(radians(latitude))
+                                    * cos(radians(longitude)
+                                    - radians($longitude))
+                                    + sin(radians($latitude))
+                                    * sin(radians(latitude))))";
 
-            // Transform results to add properties
-            if ($result instanceof \Illuminate\Pagination\LengthAwarePaginator || $result instanceof \Illuminate\Database\Eloquent\Collection) {
-                $result->transform(function ($item) {
-                    // Add service_type based on provider_item_type
-                    $item->service_type = $this->determineServiceType($item);
-                    
-                    // Add user_type if user relation is loaded
-                    if ($item->relationLoaded('user') && $item->user) {
-                        $item->user_type = $this->determineUserType($item->user);
-                    }
-                    
-                    // Process special_tags for display
-                    $item->special_tags = $this->determineSpecialTags($item);
-                    
-                    return $item;
+                    $sql->select('items.*')
+                        ->selectRaw("{$haversine} AS distance")
+                        ->withCount('favourites')
+                        ->where('latitude', '!=', 0)
+                        ->where('longitude', '!=', 0)
+                        ->having('distance', '<', $radius)
+                        ->orderBy('distance', 'asc');
                 });
+
+
+            //            // Other users should only get approved items
+            //            if (!Auth::check()) {
+            //                $sql->where('status', 'approved');
+            //            }
+
+            // Sort By
+            if ($request->sort_by == "new-to-old") {
+                $sql->orderBy('id', 'DESC');
+            } elseif ($request->sort_by == "old-to-new") {
+                $sql->orderBy('id', 'ASC');
+            } elseif ($request->sort_by == "price-high-to-low") {
+                $sql->orderBy('price', 'DESC');
+            } elseif ($request->sort_by == "price-low-to-high") {
+                $sql->orderBy('price', 'ASC');
+            } elseif ($request->sort_by == "popular_items") {
+                $sql->orderBy('clicks', 'DESC');
+            } else {
+                $sql->orderBy('id', 'DESC');
             }
+
+            // Status
+            if (!empty($request->status)) {
+                if (in_array($request->status, array('review', 'approved', 'rejected', 'sold out'))) {
+                    $sql->where('status', $request->status);
+                } elseif ($request->status == 'inactive') {
+                    //If status is inactive then display only trashed items
+                    $sql->onlyTrashed();
+                } elseif ($request->status == 'featured') {
+                    //If status is featured then display only featured items
+                    $sql->where('status', 'approved')->has('featured_items');
+                }
+            }
+
+            // Feature Section Filtration
+            if (!empty($request->featured_section_id) || !empty($request->featured_section_slug)) {
+                if (!empty($request->featured_section_id)) {
+                    $featuredSection = FeatureSection::findOrFail($request->featured_section_id);
+                } else {
+                    $featuredSection = FeatureSection::where('slug', $request->featured_section_slug)->firstOrFail();
+                }
+                $sql = match ($featuredSection->filter) {
+                    /*Note : Reorder function is used to clear out the previously applied order by statement*/
+                    "price_criteria" => $sql->whereBetween('price', [$featuredSection->min_price, $featuredSection->max_price]),
+                    "most_viewed" => $sql->reorder()->orderBy('clicks', 'DESC'),
+                    "category_criteria" => (static function () use ($featuredSection, $sql) {
+                        $category = Category::whereIn('id', explode(',', $featuredSection->value))->with('children')->get();
+                        $categoryIDS = HelperService::findAllCategoryIds($category);
+                        return $sql->whereIn('category_id', $categoryIDS);
+                    })(),
+
+                    //Added withCount here 2nd time because of some wierd issue
+                    "most_liked" => $sql->reorder()->withCount('favourites')->orderBy('favourites_count', 'DESC'),
+                };
+            }
+
+
+            if (!empty($request->search)) {
+                $sql->search($request->search);
+            }
+            function removeBackslashesRecursive($data)
+            {
+                $cleaned = [];
+                foreach ($data as $key => $value) {
+                    $cleanKey = stripslashes($key);
+                    if (is_array($value)) {
+                        $cleaned[$cleanKey] = removeBackslashesRecursive($value);
+                    } else {
+                        $cleaned[$cleanKey] = stripslashes($value);
+                    }
+                }
+                return $cleaned;
+            }
+            $cleanedParameters = removeBackslashesRecursive($request->all());
+            if (!empty($cleanedParameters['custom_fields'])) {
+                $customFields = $cleanedParameters['custom_fields'];
+                foreach ($customFields as $customFieldId => $value) {
+                    if (is_array($value)) {
+                        foreach ($value as $arrayValue) {
+                            $sql->join('item_custom_field_values as cf' . $customFieldId, function ($join) use ($customFieldId) {
+                                    $join->on('items.id', '=', 'cf' . $customFieldId . '.item_id');
+                                })
+                                ->where('cf' . $customFieldId . '.custom_field_id', $customFieldId)
+                                ->where('cf' . $customFieldId . '.value', 'LIKE', '%' . trim($arrayValue) . '%');
+                        }
+                    } else {
+                        $sql->join('item_custom_field_values as cf' . $customFieldId, function ($join) use ($customFieldId) {
+                                $join->on('items.id', '=', 'cf' . $customFieldId . '.item_id');
+                            })
+                            ->where('cf' . $customFieldId . '.custom_field_id', $customFieldId)
+                            ->where('cf' . $customFieldId . '.value', 'LIKE', '%' . trim($value) . '%');
+                    }
+                }
+                $sql->whereHas('item_custom_field_values', function ($query) use ($customFields) {
+                    $query->whereIn('custom_field_id', array_keys($customFields));
+                }, '=', count($customFields));
+            }
+
+
+            if (Auth::check()) {
+                $sql->with(['item_offers' => function ($q) {
+                    $q->where('buyer_id', Auth::user()->id);
+                }, 'user_reports'         => function ($q) {
+                    $q->where('user_id', Auth::user()->id);
+                }]);
+
+                $currentURI = explode('?', $request->getRequestUri(), 2);
+
+                if ($currentURI[0] == "/api/my-items") { //TODO: This if condition is temporary fix. Need something better
+                    $sql->where(['user_id' => Auth::user()->id])->withTrashed();
+                } else {
+                    $sql->where('status', 'approved')->has('user')->onlyNonBlockedUsers()->getNonExpiredItems();
+                }
+            } else {
+                //  Other users should only get approved items
+                $sql->where('status', 'approved')->getNonExpiredItems();
+            }
+            if (!empty($request->id)) {
+                /*
+                 * Collection does not support first OR find method's result as of now. It's a part of R&D
+                 * So currently using this shortcut method get() to fetch the first data
+                 */
+                $result = $sql->get();
+                if (count($result) == 0) {
+                    ResponseService::errorResponse("No item Found");
+                }
+            } else {
+                $result = $sql->paginate();
+
+            }
+            //                // Add three regular items
+            //                for ($i = 0; $i < 3 && $regularIndex < $regularItemCount; $i++) {
+            //                    $items->push($regularItems[$regularIndex]);
+            //                    $regularIndex++;
+            //                }
+            //
+            //                // Add one featured item if available
+            //                if ($featuredIndex < $featuredItemCount) {
+            //                    $items->push($featuredItems[$featuredIndex]);
+            //                    $featuredIndex++;
+            //                }
+            //            }
+            // Return success response with the fetched items
 
             ResponseService::successResponse("Item Fetched Successfully", new ItemCollection($result));
         } catch (Throwable $th) {
-            Log::error('Exception in getItem: ' . $th->getMessage(), [
-                'file' => $th->getFile(),
-                'line' => $th->getLine(),
-                'trace' => $th->getTraceAsString()
-            ]);
             ResponseService::logErrorResponse($th, "API Controller -> getItem");
             ResponseService::errorResponse();
         }

@@ -101,11 +101,22 @@
     {{--    @endif--}}
     {{--    @endif--}}
 
-    @if ($errors->any())
-    @foreach ($errors->all() as $error)
-    showErrorToast("{!! $error !!}");
-    @endforeach
+    @if (isset($errors) && is_object($errors) && $errors->any())
+        @foreach ($errors->all() as $error)
+            showErrorToast("{!! $error !!}");
+        @endforeach
     @endif
+    
+    @if (Session::has('errors'))
+        @if (is_object(Session::get('errors')))
+            @foreach (Session::get('errors')->all() as $error)
+                showErrorToast("{!! $error !!}");
+            @endforeach
+        @else
+            showErrorToast("{!! Session::get('errors') !!}");
+        @endif
+    @endif
+    
     @if (Session::has('error'))
     showErrorToast('{!!  Session::get('error') !!}')
     @endif

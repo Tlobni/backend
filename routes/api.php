@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 /* Authenticated Routes */
-Route::group(['middleware' => ['auth:sanctum']], static function () {
+Route::group(['middleware' => ['auth:sanctum', 'auth.status']], static function () {
     Route::get('get-package', [ApiController::class, 'getPackage']);
     Route::post('update-profile', [ApiController::class, 'updateProfile']);
     Route::delete('delete-user', [ApiController::class, 'deleteUser']);

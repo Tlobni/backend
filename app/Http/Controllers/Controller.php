@@ -60,8 +60,32 @@ class Controller extends BaseController
             //Special case for deleted_at column
             if ($column == "deleted_at") {
                 //If status is active then deleted_At will be empty otherwise it will have the current time
-                $request->status = ($request->status) ? null : now();
+                $statusValue = $request->status ? null : now();
+                DB::table($request->table)->where('id', $request->id)->update([(string)$column => $statusValue]);
+                
+                ResponseService::successResponse("Status Updated Successfully");
+                return;
             }
+            
+            // If the table is users and column is status, ensure that we're handling it properly
+            // For users table, when using status column, 1 means active, 0 means inactive
+            if ($request->table === 'users' && $column === 'status') {
+                // Make sure we're setting the correct value (1 for active, 0 for inactive)
+                // No special transformation needed as status is already a boolean
+                $statusValue = $request->status ? 1 : 0;
+                DB::table($request->table)->where('id', $request->id)->update([(string)$column => $statusValue]);
+                
+                // Log the change for debugging
+                \Illuminate\Support\Facades\Log::info('User status updated', [
+                    'user_id' => $request->id,
+                    'status' => $statusValue,
+                    'column' => $column
+                ]);
+                
+                ResponseService::successResponse("Status Updated Successfully");
+                return;
+            }
+            
             DB::table($request->table)->where('id', $request->id)->update([(string)$column => $request->status]);
             if ($request->table === 'items') {
                 $item = DB::table('items')->where('id', $request->id)->first();

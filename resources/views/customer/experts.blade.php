@@ -299,7 +299,7 @@
         function statusSwitchFormatter(value, row) {
             let checked = value ? 'checked' : '';
             return '<div class="form-check form-switch">' +
-                '<input class="form-check-input status-switch" type="checkbox" ' + checked + ' data-id="' + row.id + '">' +
+                '<input class="form-check-input update-user-status" id="' + row.id + '" type="checkbox" ' + checked + '>' +
                 '</div>';
         }
 

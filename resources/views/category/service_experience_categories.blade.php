@@ -94,35 +94,5 @@
         console.log('Table initialization for service_experience');
         $('#table_list_service').bootstrapTable();
     });
-    
-    // Initialize the delete action with confirmation and auto-refresh
-    $(function() {
-        $('body').on('click', '.delete-btn', function(e) {
-            e.preventDefault();
-            const url = $(this).attr('href');
-            
-            if (confirm('{{ __("Are you sure you want to delete this category?") }}')) {
-                $.ajax({
-                    url: url,
-                    type: 'DELETE',
-                    data: {
-                        _token: '{{ csrf_token() }}'
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            toastr.success(response.message);
-                            // Refresh the table
-                            $('#table_list_service').bootstrapTable('refresh');
-                        } else {
-                            toastr.error(response.message);
-                        }
-                    },
-                    error: function(xhr) {
-                        toastr.error('{{ __("An error occurred while deleting the category.") }}');
-                    }
-                });
-            }
-        });
-    });
 </script>
 @endpush 

@@ -55,11 +55,26 @@ class CustomersController extends Controller {
     public function update(Request $request) {
         try {
             ResponseService::noPermissionThenSendJson('customer-update');
-            User::where('id', $request->id)->update(['status' => $request->status]);
-            $message = $request->status ? "Customer Activated Successfully" : "Customer Deactivated Successfully";
+            
+            $user = User::withTrashed()->findOrFail($request->id);
+            
+            if ($request->status == 1) {
+                // Activate user (restore if soft-deleted)
+                if ($user->trashed()) {
+                    $user->restore();
+                }
+                $message = "Customer Activated Successfully";
+            } else {
+                // Instead of using soft delete, we'll set a status field
+                // We won't call $user->delete() as that removes the row from view
+                // Instead we'll mark the user as inactive without using soft delete
+                User::where('id', $request->id)->update(['status' => 0]);
+                $message = "Customer Deactivated Successfully";
+            }
+            
             ResponseService::successResponse($message);
-        } catch (Throwable) {
-            ResponseService::errorRedirectResponse('Something Went Wrong ');
+        } catch (Throwable $e) {
+            ResponseService::errorRedirectResponse('Something Went Wrong: ' . $e->getMessage());
         }
     }
 
@@ -86,6 +101,9 @@ class CustomersController extends Controller {
         // Include user_purchased_packages relationship for all roles
         $sql = $sql->with(['user_purchased_packages.package']);
 
+        // Important: Include soft deleted users so they appear in the table with inactive status
+        $sql = $sql->withTrashed();
+
         $total = $sql->count();
         $sql->skip($offset)->take($limit);
         $result = $sql->get();
@@ -96,7 +114,15 @@ class CustomersController extends Controller {
         foreach ($result as $row) {
             $tempRow = $row->toArray();
             $tempRow['no'] = $no++;
-            $tempRow['status'] = empty($row->deleted_at);
+            
+            // Use the status field if it exists, otherwise fallback to checking deleted_at
+            // This makes the status toggle work correctly showing active/inactive state
+            if (isset($row->status)) {
+                $tempRow['status'] = (int)$row->status === 1;
+            } else {
+                $tempRow['status'] = empty($row->deleted_at);
+            }
+            
             $tempRow['is_verified'] = $row->is_verified;
             $tempRow['auto_approve_item'] = $row->auto_approve_item;
             $tempRow['role'] = $role;
@@ -213,6 +239,9 @@ class CustomersController extends Controller {
             $sql = $sql->search($request->search);
         }
 
+        // Important: Include soft deleted users so they appear in the table with inactive status
+        $sql = $sql->withTrashed();
+
         // We'll check for relationships in a safer way
         try {
             // Add relationships based on role if they exist
@@ -241,7 +270,14 @@ class CustomersController extends Controller {
         foreach ($result as $row) {
             $tempRow = $row->toArray();
             $tempRow['no'] = $no++;
-            $tempRow['status'] = empty($row->deleted_at);
+            
+            // Use the status field if it exists, otherwise fallback to checking deleted_at
+            if (isset($row->status)) {
+                $tempRow['status'] = (int)$row->status === 1;
+            } else {
+                $tempRow['status'] = empty($row->deleted_at);
+            }
+            
             $tempRow['is_verified'] = $row->is_verified ?? 0;
             $tempRow['auto_approve_item'] = $row->auto_approve_item ?? 0;
             $tempRow['role'] = $role;

@@ -50,9 +50,10 @@ function itemStatusSwitchFormatter(value, row) {
 }
 
 function userStatusSwitchFormatter(value, row) {
+    const userId = row.user_id || row.id;
     return `<div class="form-check form-switch">
-        <input class = "form-check-input switch1 update-user-status" id="${row.user_id}" type = "checkbox" role = "switch${status}" ${value ? 'checked' : ''}>
-    </div>`
+        <input class="form-check-input switch1 update-user-status" id="${userId}" type="checkbox" role="switch" ${value ? 'checked' : ''}>
+    </div>`;
 }
 
 

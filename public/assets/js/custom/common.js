@@ -37,6 +37,9 @@ $.ajaxSetup({
     }
 });
 
+// Global variables
+var delete_confirmation_text = 'Are you sure you want to delete this item?';
+
 $('#create-form,.create-form,.create-form-without-reset').on('submit', function (e) {
     e.preventDefault();
     let formElement = $(this);
@@ -147,6 +150,34 @@ $(document).on('click', '.delete-form-reload', function (e) {
         }
     })
 })
+
+// Handler for ajax delete buttons
+$(document).on('click', '.delete-btn', function(e) {
+    e.preventDefault();
+    const url = $(this).attr('href');
+    
+    if (confirm(delete_confirmation_text)) {
+        $.ajax({
+            url: url,
+            type: 'DELETE',
+            data: {
+                _token: $('meta[name="csrf-token"]').attr('content')
+            },
+            success: function(response) {
+                if (response.success) {
+                    alert(response.message || 'Item deleted successfully');
+                    // Refresh the page instead of just the table
+                    window.location.reload();
+                } else {
+                    alert(response.message || 'Failed to delete item');
+                }
+            },
+            error: function(xhr) {
+                alert('An error occurred while deleting the item.');
+            }
+        });
+    }
+});
 
 // Change event for Status toggle change in Bootstrap-table
 $(document).on('change', '.update-status', function () {
