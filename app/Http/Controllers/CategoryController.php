@@ -346,7 +346,7 @@ class CategoryController extends Controller {
                 // Check if user has category-delete permission
                 try {
                     ResponseService::noPermissionThenSendJson('category-delete');
-                    $operate .= BootstrapTableService::deleteButton(route('category.destroy', $subcategory->id));
+                    $operate .= BootstrapTableService::ajaxDeleteButton(route('category.destroy', $subcategory->id));
                 } catch (\Exception $e) {
                     // User doesn't have permission, do nothing
                 }

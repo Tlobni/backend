@@ -415,7 +415,7 @@ $(document).on('change', '.update-user-status', function () {
     ajaxRequest('PUT', url, {
         id: $(this).attr('id'),
         table: "users",
-        column: "deleted_at",
+        column: "status",
         status: $(this).is(':checked') ? 1 : 0
     }, null, function (response) {
         showSuccessToast(response.message);

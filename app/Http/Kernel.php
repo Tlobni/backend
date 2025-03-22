@@ -3,7 +3,9 @@
 namespace App\Http;
 
 use App\Http\Middleware\ApiLocalizationMiddleware;
+use App\Http\Middleware\CheckUserStatus;
 use App\Http\Middleware\DemoMiddleware;
+use App\Http\Middleware\SanctumStatusCheck;
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 
@@ -42,6 +44,7 @@ class Kernel extends HttpKernel {
             \Illuminate\View\Middleware\ShareErrorsFromSession::class,
             \App\Http\Middleware\VerifyCsrfToken::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            CheckUserStatus::class,
             DemoMiddleware::class,
         ],
 
@@ -50,6 +53,7 @@ class Kernel extends HttpKernel {
             // \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             ApiLocalizationMiddleware::class,
+            CheckUserStatus::class,
             DemoMiddleware::class,
         ],
     ];
@@ -74,5 +78,7 @@ class Kernel extends HttpKernel {
         'verified'         => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'language'         => \App\Http\Middleware\LanguageManager::class,
         'permission'       => PermissionMiddleware::class,
+        'check.status'     => CheckUserStatus::class,
+        'auth.status'      => SanctumStatusCheck::class,
     ];
 }
