@@ -60,8 +60,7 @@ Route::group(['middleware' => ['auth:sanctum', 'auth.status']], static function 
     // New review endpoints
     Route::post('add-user-review', [ApiController::class, 'addUserReview']);
     Route::post('add-service-review', [ApiController::class, 'addServiceReview']);
-    Route::get('user-review', [ApiController::class, 'getUserReview']);
-    Route::get('item-review', [ApiController::class, 'getItemReview']);
+
 
     Route::get('verification-fields', [ApiController::class, 'getVerificationFields']);
     Route::post('send-verification-request',[ApiController::class,'sendVerificationRequest']);
@@ -69,7 +68,8 @@ Route::group(['middleware' => ['auth:sanctum', 'auth.status']], static function 
 });
 
 /* Non Authenticated Routes */
-
+Route::get('user-review', [ApiController::class, 'getUserReview']);
+Route::get('item-review', [ApiController::class, 'getItemReview']);
 Route::post('login', [ApiController::class, 'login']);
 Route::get('get-package', [ApiController::class, 'getPackage']);
 Route::get('get-languages', [ApiController::class, 'getLanguages']);

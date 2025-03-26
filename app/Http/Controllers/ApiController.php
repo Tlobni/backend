@@ -96,6 +96,8 @@ class ApiController extends Controller
             'storeContactUs',
             'seoSettings',
             'getSeller',
+            'getUserReview',
+            'getItemReview',
         ]);
     }
 
@@ -661,24 +663,28 @@ class ApiController extends Controller
 
     public function getItem(Request $request) {
         $validator = Validator::make($request->all(), [
-            'limit'         => 'nullable|integer',
-            'offset'        => 'nullable|integer',
-            'id'            => 'nullable',
-            'custom_fields' => 'nullable',
-            'category_id'   => 'nullable',
-            'user_id'       => 'nullable',
-            'min_price'     => 'nullable',
-            'max_price'     => 'nullable',
-            'sort_by'       => 'nullable|in:new-to-old,old-to-new,price-high-to-low,price-low-to-high,popular_items',
-            'posted_since'  => 'nullable|in:all-time,today,within-1-week,within-2-week,within-1-month,within-3-month'
+            'limit'             => 'nullable|integer',
+            'offset'            => 'nullable|integer',
+            'id'                => 'nullable',
+            'custom_fields'     => 'nullable',
+            'category_id'       => 'nullable',
+            'user_id'           => 'nullable',
+            'min_price'         => 'nullable',
+            'max_price'         => 'nullable',
+            'gender'            => 'nullable|in:Male,Female',
+            'user_type'         => 'nullable|in:business,expert',
+            'provider_item_type' => 'nullable|in:service,experience',
+            'sort_by'           => 'nullable|in:new-to-old,old-to-new,price-high-to-low,price-low-to-high,popular_items',
+            'posted_since'      => 'nullable|in:all-time,today,within-1-week,within-2-week,within-1-month,within-3-month'
         ]);
+        Log::info("getItem request: " . json_encode($request->all()));
 
         if ($validator->fails()) {
             ResponseService::validationError($validator->errors()->first());
         }
         try {
             //TODO : need to simplify this whole module
-            $sql = Item::with('user:id,name,email,mobile,profile,created_at,is_verified,show_personal_details,country_code', 'category:id,name,image', 'gallery_images:id,image,item_id', 'featured_items', 'favourites', 'item_custom_field_values.custom_field', 'area:id,name')
+            $sql = Item::with('user:id,name,email,mobile,profile,created_at,is_verified,show_personal_details,country_code,gender', 'category:id,name,image', 'gallery_images:id,image,item_id', 'featured_items', 'favourites', 'item_custom_field_values.custom_field', 'area:id,name')
                 ->withCount('favourites')
                 ->select('items.*')
                 ->when($request->id, function ($sql) use ($request) {
@@ -691,11 +697,47 @@ class ApiController extends Controller
                     $category = Category::where('slug', $request->category_slug)->with('children')->get();
                     $categoryIDS = HelperService::findAllCategoryIds($category);
                     return $sql->whereIn('category_id', $categoryIDS);
+                })->when($request->gender, function ($sql) use ($request) {
+                    return $sql->whereHas('user', function($query) use ($request) {
+                        $query->where('gender', $request->gender);
+                    });
                 })->when((isset($request->min_price) || isset($request->max_price)), function ($sql) use ($request) {
                     $min_price = $request->min_price ?? 0;
                     $max_price = $request->max_price ?? Item::max('price');
                     return $sql->whereBetween('price', [$min_price, $max_price]);
-                })->when($request->posted_since, function ($sql) use ($request) {
+                })->when($request->user_type, function ($sql) use ($request) {
+                    // Filter by user type (business or expert)
+                    Log::info("Filtering by user_type: " . $request->user_type);
+                    
+                    // Get the normalized search term
+                    $userType = strtolower($request->user_type);
+                    
+                    return $sql->where(function($query) use ($userType) {
+                        $query->whereHas('user', function($userQuery) use ($userType) {
+                            Log::info("Checking for user_type in user table: " . $userType);
+                            
+                            // Check multiple fields that might contain user type information
+                            $userQuery->where(function($subquery) use ($userType) {
+                                // Check type field
+                                $subquery->where('type', 'LIKE', "%{$userType}%")
+                                         ->orWhere('type', 'LIKE', "%".ucfirst($userType)."%");
+                                
+                                // Check provider_type field
+                                $subquery->orWhere('provider_type', 'LIKE', "%{$userType}%")
+                                         ->orWhere('provider_type', 'LIKE', "%".ucfirst($userType)."%");
+                                
+                                // Check via roles
+                                $subquery->orWhereHas('roles', function($q) use ($userType) {
+                                    $q->where(function($roleQuery) use ($userType) {
+                                        $roleQuery->whereRaw('LOWER(name) LIKE ?', ["%{$userType}%"])
+                                                 ->orWhereRaw('LOWER(name) LIKE ?', ["%".ucfirst($userType)."%"]);
+                                    });
+                                });
+                            });
+                        });
+                    });
+                })
+                ->when($request->posted_since, function ($sql) use ($request) {
                     return match ($request->posted_since) {
                         "today" => $sql->whereDate('created_at', '>=', now()),
                         "within-1-week" => $sql->whereDate('created_at', '>=', now()->subDays(7)),
@@ -716,6 +758,24 @@ class ApiController extends Controller
                     return $sql->where('user_id', $request->user_id);
                 })->when($request->slug, function ($sql) use ($request) {
                     return $sql->where('slug', $request->slug);
+                })->when($request->provider_item_type, function ($sql) use ($request) {
+                    return $sql->where('provider_item_type', $request->provider_item_type);
+                })->when($request->special_tags, function ($sql) use ($request) {
+                    // Handle special tags filtering
+                    $specialTags = $request->special_tags;
+                    
+                    // Process each special tag
+                    foreach ($specialTags as $tagKey => $tagValue) {
+                        // Only apply filter if the tag value is 'true'
+                        if ($tagValue === 'true' || $tagValue === true) {
+                            $sql->where(function($query) use ($tagKey) {
+                                $query->where('special_tags', 'like', '%"'.$tagKey.'"%')
+                                      ->orWhere('special_tags', 'like', '%:'.$tagKey.'%');
+                            });
+                        }
+                    }
+                    
+                    return $sql;
                 })->when($request->latitude && $request->longitude && $request->radius, function ($sql) use ($request) {
                     $latitude = $request->latitude;
                     $longitude = $request->longitude;
