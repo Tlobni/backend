@@ -1172,7 +1172,8 @@ class ApiController extends Controller
     public function getSubCategories(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'category_id' => 'nullable|integer'
+            'category_id' => 'nullable|integer',
+            'type' => 'nullable|string|in:service_experience,providers'
         ]);
 
         if ($validator->fails()) {
@@ -1191,6 +1192,12 @@ class ApiController extends Controller
                         $q->where('status', 1);
                     }]);
                 }]);
+            
+            // Filter by type if specified
+            if (!empty($request->type)) {
+                $sql = $sql->type($request->type);
+            }
+            
             if (!empty($request->category_id)) {
                 $sql = $sql->where('parent_category_id', $request->category_id);
             } else if (!empty($request->slug)) {

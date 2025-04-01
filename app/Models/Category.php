@@ -69,6 +69,13 @@ class Category extends Model {
         });
     }
 
+    public function scopeType($query, $type) {
+        if ($type) {
+            return $query->where('type', $type);
+        }
+        return $query;
+    }
+
     public function slider(): MorphOne {
         return $this->morphOne(Slider::class, 'model');
     }
