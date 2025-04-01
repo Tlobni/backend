@@ -59,6 +59,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
 use Throwable;
+use Illuminate\Support\Facades\Schema;
 
 class ApiController extends Controller
 {
@@ -98,6 +99,10 @@ class ApiController extends Controller
             'getSeller',
             'getUserReview',
             'getItemReview',
+            'getExclusiveWomenItems',
+            'getCorporatePackageItems',
+            'getExperienceItems',
+            'getNewestItems',
         ]);
     }
 
@@ -280,8 +285,11 @@ class ApiController extends Controller
                 'businessName'          => 'nullable|string',
                 'categories'            => 'nullable|string',
                 'phone'                 => 'nullable|string',
-                'city'                  => 'nullable|string'
+                'city'                  => 'nullable|string',
+                'bio'                   => 'nullable|string'
             ]);
+
+            Log::info('Update Profile Request', $request->all());
 
             if ($validator->fails()) {
                 ResponseService::validationError($validator->errors()->first());
@@ -330,15 +338,28 @@ class ApiController extends Controller
                     if ($request->providerType === 'Expert') {
                         $user->syncRoles(['Expert']);
                         $data['provider_type'] = 'Expert';
+                        // Save bio for Expert
+                        if (isset($request->bio)) {
+                            $data['bio'] = $request->bio;
+                        }
                     } elseif ($request->providerType === 'Business') {
                         $user->syncRoles(['Business']);
                         $data['provider_type'] = 'Business';
+                        // Save bio for Business
+                        if (isset($request->bio)) {
+                            $data['bio'] = $request->bio;
+                        }
                     }
                 } else {
                     // Assign "Client" role for non-providers
                     $user->syncRoles(['Client']);
                     $data['provider_type'] = null;
+                    // Remove bio for Client
+                    unset($data['bio']);
                 }
+            } else if (isset($request->bio) && ($app_user->provider_type === 'Expert' || $app_user->provider_type === 'Business')) {
+                // Update bio if user is already an Expert or Business
+                $data['bio'] = $request->bio;
             }
 
             DB::table('users')->where('id', $app_user->id)->update($data);
@@ -2540,6 +2561,259 @@ class ApiController extends Controller
             ResponseService::errorResponse();
         }
     }
+
+    public function getExclusiveWomenItems(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'limit'   => 'nullable|integer',
+            'offset'  => 'nullable|integer',
+            'sort_by' => 'nullable|in:new-to-old,old-to-new,price-high-to-low,price-low-to-high,popular_items',
+        ]);
+
+        if ($validator->fails()) {
+            return ResponseService::validationError($validator->errors()->first());
+        }
+        
+        try {
+            $sql = Item::with('user:id,name,email,mobile,profile,created_at,is_verified,show_personal_details,country_code,gender', 
+                            'category:id,name,image', 
+                            'gallery_images:id,image,item_id', 
+                            'featured_items', 
+                            'favourites', 
+                            'item_custom_field_values.custom_field', 
+                            'area:id,name')
+                ->withCount('favourites')
+                ->select('items.*')
+                ->whereRaw("JSON_EXTRACT(special_tags, '$.exclusive_women') = 'true'");
+                
+            // Handle sorting
+            if ($request->sort_by) {
+                $sql = $this->applySorting($sql, $request->sort_by);
+            } else {
+                $sql = $sql->orderBy('id', 'desc');
+            }
+            
+            // Apply pagination
+            $total = $sql->count();
+            $items = $sql->skip($request->offset ?? 0)
+                ->take($request->limit ?? 10)
+                ->get();
+                
+            // Apply special tag determination to each item
+            foreach ($items as $item) {
+                $this->determineSpecialTags($item);
+            }
+            
+            return ResponseService::successResponse('Items retrieved successfully', [
+                'items' => $items,
+                'total' => $total
+            ]);
+        } catch (\Exception $e) {
+            Log::error('getExclusiveWomenItems error: ' . $e->getMessage());
+            return ResponseService::errorResponse('Something went wrong');
+        }
+    }
+
+    public function getCorporatePackageItems(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'limit'   => 'nullable|integer',
+            'offset'  => 'nullable|integer',
+            'sort_by' => 'nullable|in:new-to-old,old-to-new,price-high-to-low,price-low-to-high,popular_items',
+        ]);
+
+        if ($validator->fails()) {
+            return ResponseService::validationError($validator->errors()->first());
+        }
+        
+        try {
+            $sql = Item::with('user:id,name,email,mobile,profile,created_at,is_verified,show_personal_details,country_code,gender', 
+                            'category:id,name,image', 
+                            'gallery_images:id,image,item_id', 
+                            'featured_items', 
+                            'favourites', 
+                            'item_custom_field_values.custom_field', 
+                            'area:id,name')
+                ->withCount('favourites')
+                ->select('items.*')
+                ->whereRaw("JSON_EXTRACT(special_tags, '$.corporate_package') = 'true'");
+                
+            // Handle sorting
+            if ($request->sort_by) {
+                $sql = $this->applySorting($sql, $request->sort_by);
+            } else {
+                $sql = $sql->orderBy('id', 'desc');
+            }
+            
+            // Apply pagination
+            $total = $sql->count();
+            $items = $sql->skip($request->offset ?? 0)
+                ->take($request->limit ?? 10)
+                ->get();
+                
+            // Apply special tag determination to each item
+            foreach ($items as $item) {
+                $this->determineSpecialTags($item);
+            }
+            
+            return ResponseService::successResponse('Items retrieved successfully', [
+                'items' => $items,
+                'total' => $total
+            ]);
+        } catch (\Exception $e) {
+            Log::error('getCorporatePackageItems error: ' . $e->getMessage());
+            return ResponseService::errorResponse('Something went wrong');
+        }
+    }
+
+    private function applySorting($query, $sortBy)
+    {
+        switch ($sortBy) {
+            case 'new-to-old':
+                return $query->orderBy('id', 'desc');
+            case 'old-to-new':
+                return $query->orderBy('id', 'asc');
+            case 'price-high-to-low':
+                return $query->orderBy('price', 'desc');
+            case 'price-low-to-high':
+                return $query->orderBy('price', 'asc');
+            case 'popular_items':
+                return $query->orderBy('total_click', 'desc');
+            default:
+                return $query->orderBy('id', 'desc');
+        }
+    }
+
+    public function getExperienceItems(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'limit'   => 'nullable|integer',
+            'offset'  => 'nullable|integer',
+            'sort_by' => 'nullable|in:new-to-old,old-to-new,price-high-to-low,price-low-to-high,popular_items',
+        ]);
+
+        if ($validator->fails()) {
+            return ResponseService::validationError($validator->errors()->first());
+        }
+        
+        try {
+            // Get all items first and log total count
+            $allItemsCount = Item::count();
+            Log::info("Total items in database: " . $allItemsCount);
+            
+            // Check for any special_tags values to understand structure
+            $specialTagSamples = Item::whereNotNull('special_tags')
+                                     ->where('special_tags', '<>', '')
+                                     ->limit(3)
+                                     ->pluck('special_tags');
+            Log::info("Special tag samples: ", $specialTagSamples->toArray());
+            
+            $sql = Item::with('user:id,name,email,mobile,profile,created_at,is_verified,show_personal_details,country_code,gender', 
+                            'category:id,name,image', 
+                            'gallery_images:id,image,item_id', 
+                            'featured_items', 
+                            'favourites', 
+                            'item_custom_field_values.custom_field', 
+                            'area:id,name')
+                ->withCount('favourites')
+                ->select('items.*')
+                ->where(function($query) {
+                    // Check provider_item_type field with multiple ways to identify experiences
+                    $query->where('provider_item_type', '=', 'experience')
+                          ->orWhere('provider_item_type', '=', 'Experience')
+                          ->orWhere('provider_item_type', 'LIKE', '%experience%')
+                          // Check various potential JSON keys in special_tags
+                          ->orWhereRaw("JSON_EXTRACT(special_tags, '$.is_experience') = ?", ['true'])
+                          ->orWhereRaw("JSON_EXTRACT(special_tags, '$.experience') = ?", ['true'])
+                          ->orWhereRaw("JSON_EXTRACT(special_tags, '$.exclusive_experience') = ?", ['true']);
+                });
+                
+            // For testing, let's see items without filtering by status first
+            $unfilteredCount = $sql->count();
+            Log::info("Items matching experience criteria (without status filter): " . $unfilteredCount);
+            
+            // Handle sorting
+            if ($request->sort_by) {
+                $sql = $this->applySorting($sql, $request->sort_by);
+            } else {
+                $sql = $sql->orderBy('id', 'desc');
+            }
+            
+            // Apply pagination
+            $total = $sql->count();
+            Log::info("Experience items count (with status=active): " . $total);
+            
+            $items = $sql->skip($request->offset ?? 0)
+                ->take($request->limit ?? 10)
+                ->get();
+            
+            // Apply special tag determination to each item
+            foreach ($items as $item) {
+                $this->determineSpecialTags($item);
+                $this->determineServiceType($item);
+                Log::info("Found experience item: " . $item->id . ", provider_item_type: " . $item->provider_item_type . ", special_tags: " . $item->special_tags);
+            }
+            
+            // If we didn't find any items even after trying all these methods, let's return all items for debugging
+            if ($total == 0 && $allItemsCount > 0) {
+                Log::warning("No experience items found with specific criteria. Check your data to ensure experience items exist.");
+            }
+            
+            return ResponseService::successResponse('Experience items retrieved successfully', [
+                'items' => $items,
+                'total' => $total
+            ]);
+        } catch (\Exception $e) {
+            Log::error('getExperienceItems error: ' . $e->getMessage());
+            return ResponseService::errorResponse('Something went wrong');
+        }
+    }
+
+    public function getNewestItems(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'limit'  => 'nullable|integer',
+            'offset' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return ResponseService::validationError($validator->errors()->first());
+        }
+        
+        try {
+            $sql = Item::with('user:id,name,email,mobile,profile,created_at,is_verified,show_personal_details,country_code,gender', 
+                            'category:id,name,image', 
+                            'gallery_images:id,image,item_id', 
+                            'featured_items', 
+                            'favourites', 
+                            'item_custom_field_values.custom_field', 
+                            'area:id,name')
+                ->withCount('favourites')
+                ->select('items.*')
+                ->orderBy('created_at', 'desc'); // Always sort by newest first
+            
+            // Apply pagination
+            $total = $sql->count();
+            $items = $sql->skip($request->offset ?? 0)
+                ->take($request->limit ?? 10)
+                ->get();
+            
+            // Process each item
+            foreach ($items as $item) {
+                $this->determineSpecialTags($item);
+                $this->determineServiceType($item);
+            }
+            
+            return ResponseService::successResponse('Newest items retrieved successfully', [
+                'items' => $items,
+                'total' => $total
+            ]);
+        } catch (\Exception $e) {
+            Log::error('getNewestItems error: ' . $e->getMessage());
+            return ResponseService::errorResponse('Something went wrong');
+        }
+    }
+
     public function seoSettings(Request $request)
     {
         try {

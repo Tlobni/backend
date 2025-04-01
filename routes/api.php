@@ -95,3 +95,7 @@ Route::get('areas', [ApiController::class, 'getAreas']);
 Route::post('contact-us', [ApiController::class, 'storeContactUs']);
 Route::get('seo-settings', [ApiController::class, 'seoSettings']);
 Route::get('get-seller', [ApiController::class, 'getSeller']);
+Route::get('experience-items', [ApiController::class, 'getExperienceItems']);
+Route::get('exclusive-women-items', [ApiController::class, 'getExclusiveWomenItems']);
+Route::get('corporate-package-items', [ApiController::class, 'getCorporatePackageItems']);
+Route::get('newest-items', [ApiController::class, 'getNewestItems']);

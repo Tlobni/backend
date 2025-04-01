@@ -40,6 +40,7 @@ class User extends Authenticatable
         'categories',
         'phone',
         'gender',
+        'bio',
         'location',
         'platform_type',
         'provider_type',
