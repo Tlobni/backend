@@ -13,11 +13,11 @@
                 @if (!empty($category))
                     <a class="btn btn-primary me-2" href="{{ route('category.service.experience') }}">< {{__("Back to All Service & Experience Categories")}} </a>
                     @can('category-create')
-                        <a class="btn btn-primary me-2" href="{{ route('category.create', ['id' => $category->id, 'type' => 'service_experience']) }}">+ {{__("Add Subcategory")}} - /{{ $category->name }} </a>
+                        <a class="btn btn-primary me-2" href="{{ route('category.create.service', ['id' => $category->id]) }}">+ {{__("Add Subcategory")}} - /{{ $category->name }} </a>
                     @endcanany
                 @else
                     @can('category-create')
-                        <a class="btn btn-primary" href="{{ route('category.create', ['type' => 'service_experience']) }}">+ {{__("Add Category")}} </a>
+                        <a class="btn btn-primary" href="{{ route('category.create.service') }}">+ {{__("Add Category")}} </a>
                     @endcan
                 @endif
             </div>

@@ -127,6 +127,8 @@ Route::group(['middleware' => ['auth', 'language']], static function () {
         Route::group(['prefix' => 'category'], static function () {
             Route::get('/service-experience', [CategoryController::class, 'serviceExperienceCategories'])->name('category.service.experience');
             Route::get('/providers', [CategoryController::class, 'providerCategories'])->name('category.providers');
+            Route::get('/create-service', [CategoryController::class, 'createServiceCategory'])->name('category.create.service');
+            Route::get('/create-provider', [CategoryController::class, 'createProviderCategory'])->name('category.create.provider');
             Route::get('/{id}/subcategories', [CategoryController::class, 'getSubCategories'])->name('category.subcategories');
             Route::get('/{id}/custom-fields', [CategoryController::class, 'customFields'])->name('category.custom-fields');
             Route::get('/{id}/custom-fields/show', [CategoryController::class, 'getCategoryCustomFields'])->name('category.custom-fields.show');

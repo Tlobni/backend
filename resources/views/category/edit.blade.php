@@ -21,9 +21,9 @@
     <section class="section">
         <div class="buttons">
             @if($category_data->type == 'providers')
-                <a class="btn btn-primary" href="{{ route('category.index', ['type' => 'providers']) }}">< {{__("Back to Provider Categories")}} </a>
+                <a class="btn btn-primary" href="{{ route('category.providers') }}">< {{__("Back to Provider Categories")}} </a>
             @else
-                <a class="btn btn-primary" href="{{ route('category.index', ['type' => 'service_experience']) }}">< {{__("Back to Service & Experience Categories")}} </a>
+                <a class="btn btn-primary" href="{{ route('category.service.experience') }}">< {{__("Back to Service & Experience Categories")}} </a>
             @endif
         </div>
         <div class="row">

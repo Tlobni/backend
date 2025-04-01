@@ -80,6 +80,74 @@ class CategoryController extends Controller {
         return view('category.create', compact('languages', 'type', 'parentCategories'));
     }
 
+    /**
+     * Create Service Experience Category
+     */
+    public function createServiceCategory(Request $request) {
+        ResponseService::noPermissionThenRedirect('category-create');
+        $languages = CachingService::getLanguages()->where('code', '!=', 'en')->values();
+        
+        // Load parent categories for service_experience type
+        $parentCategories = [];
+        try {
+            // Get all categories of the service_experience type
+            $categories = Category::where('type', 'service_experience')
+                ->orderBy('sequence')
+                ->get();
+            
+            // Build a hierarchical structure with level information
+            $result = [];
+            $this->buildCategoryHierarchy($categories, $result);
+            $parentCategories = $result;
+            
+        } catch (Throwable $th) {
+            Log::error("Error loading parent categories: " . $th->getMessage());
+        }
+        
+        // Get category ID if passed for subcategory creation
+        $categoryId = $request->input('id');
+        if ($categoryId) {
+            // Add category ID to view data for subcategory form
+            return view('category.create_service_experience', compact('languages', 'parentCategories', 'categoryId'));
+        }
+        
+        return view('category.create_service_experience', compact('languages', 'parentCategories'));
+    }
+
+    /**
+     * Create Provider Category
+     */
+    public function createProviderCategory(Request $request) {
+        ResponseService::noPermissionThenRedirect('category-create');
+        $languages = CachingService::getLanguages()->where('code', '!=', 'en')->values();
+        
+        // Load parent categories for providers type
+        $parentCategories = [];
+        try {
+            // Get all categories of the providers type
+            $categories = Category::where('type', 'providers')
+                ->orderBy('sequence')
+                ->get();
+            
+            // Build a hierarchical structure with level information
+            $result = [];
+            $this->buildCategoryHierarchy($categories, $result);
+            $parentCategories = $result;
+            
+        } catch (Throwable $th) {
+            Log::error("Error loading parent categories: " . $th->getMessage());
+        }
+        
+        // Get category ID if passed for subcategory creation
+        $categoryId = $request->input('id');
+        if ($categoryId) {
+            // Add category ID to view data for subcategory form
+            return view('category.create_provider', compact('languages', 'parentCategories', 'categoryId'));
+        }
+        
+        return view('category.create_provider', compact('languages', 'parentCategories'));
+    }
+
     public function store(Request $request) {
         ResponseService::noPermissionThenSendJson('category-create');
         $request->validate([
@@ -207,10 +275,10 @@ class CategoryController extends Controller {
         $translations = $category_data->translations->pluck('name', 'language_id')->toArray();
         $languages = CachingService::getLanguages()->where('code', '!=', 'en')->values();
         
-        // Load parent categories
+        // Load parent categories of the same type as the category being edited
         $parentCategories = [];
         try {
-            // Get all categories of the selected type
+            // Get all categories of the same type
             $categories = Category::where('type', $category_data->type)
                 ->where('id', '!=', $id) // Exclude current category to prevent self-reference
                 ->orderBy('sequence')
@@ -240,6 +308,7 @@ class CategoryController extends Controller {
             'status'             => 'required|boolean',
             'translations'       => 'nullable|array',
             'translations.*'     => 'nullable|string',
+            'type'               => 'required|in:service_experience,providers',
         ]);
 
         try {
@@ -271,7 +340,12 @@ class CategoryController extends Controller {
                 }
             }
             
-            ResponseService::successRedirectResponse("Category Updated Successfully", route('category.index', ['type' => $category->type]));
+            // Redirect to the appropriate category list based on type
+            if ($category->type == 'providers') {
+                ResponseService::successRedirectResponse("Category Updated Successfully", route('category.providers'));
+            } else {
+                ResponseService::successRedirectResponse("Category Updated Successfully", route('category.service.experience'));
+            }
         } catch (QueryException $e) {
             ResponseService::errorRedirectResponse("Unable to update, there is an issue with database operation");
         } catch (Throwable $e) {

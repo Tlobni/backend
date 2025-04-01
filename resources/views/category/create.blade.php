@@ -1,4 +1,28 @@
-@extends('layouts.main')
+@php
+// Redirect to the appropriate create page based on the type
+if (isset($_GET['type']) && $_GET['type'] == 'providers') {
+    $url = isset($_GET['id']) 
+        ? route('category.create.provider', ['id' => $_GET['id']]) 
+        : route('category.create.provider');
+    header('Location: ' . $url);
+    exit;
+} else {
+    $url = isset($_GET['id']) 
+        ? route('category.create.service', ['id' => $_GET['id']]) 
+        : route('category.create.service');
+    header('Location: ' . $url);
+    exit;
+}
+@endphp
+
+<h1>Redirecting...</h1>
+<p>If you are not redirected automatically, please click the appropriate link below:</p>
+<ul>
+    <li><a href="{{ route('category.create.provider') }}">Create Provider Category</a></li>
+    <li><a href="{{ route('category.create.service') }}">Create Service & Experience Category</a></li>
+</ul>
+
+{{-- @extends('layouts.main')
 @section('title')
     @if(isset($type) && $type == 'providers')
         {{__("Create Provider Category")}}
@@ -135,4 +159,4 @@
 </script>
 @endpush
 
-
+ --}}
