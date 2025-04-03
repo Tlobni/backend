@@ -789,14 +789,19 @@ class ApiController extends Controller
                 })->when($request->special_tags, function ($sql) use ($request) {
                     // Handle special tags filtering
                     $specialTags = $request->special_tags;
+                    Log::info("Filtering by special_tags: " . json_encode($specialTags));
                     
                     // Process each special tag
                     foreach ($specialTags as $tagKey => $tagValue) {
-                        // Only apply filter if the tag value is 'true'
+                        // For tags with value "true", we want items that have this tag set to true
                         if ($tagValue === 'true' || $tagValue === true) {
+                            $sql->whereRaw("JSON_EXTRACT(special_tags, '$.".$tagKey."') = 'true'");
+                        }
+                        // For tags with value "false", we want items that either don't have this tag or have it set to false
+                        elseif ($tagValue === 'false' || $tagValue === false) {
                             $sql->where(function($query) use ($tagKey) {
-                                $query->where('special_tags', 'like', '%"'.$tagKey.'"%')
-                                      ->orWhere('special_tags', 'like', '%:'.$tagKey.'%');
+                                $query->whereRaw("JSON_EXTRACT(special_tags, '$.".$tagKey."') = 'false'")
+                                    ->orWhereRaw("JSON_EXTRACT(special_tags, '$.".$tagKey."') IS NULL");
                             });
                         }
                     }
