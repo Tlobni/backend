@@ -1737,11 +1737,6 @@ class ApiController extends Controller
             // Then check if the item meets the required criteria
             $item = Item::where('id', $request->item_id)->first();
             
-            // Verify item is approved
-            if (!$item->is_approved) {
-                return ResponseService::errorResponse('Item is not approved', 403);
-            }
-            
             // Verify user is not the owner
             if ($item->user_id == Auth::user()->id) {
                 return ResponseService::errorResponse('You cannot make an offer on your own item', 403);
