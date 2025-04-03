@@ -99,3 +99,4 @@ Route::get('experience-items', [ApiController::class, 'getExperienceItems']);
 Route::get('exclusive-women-items', [ApiController::class, 'getExclusiveWomenItems']);
 Route::get('corporate-package-items', [ApiController::class, 'getCorporatePackageItems']);
 Route::get('newest-items', [ApiController::class, 'getNewestItems']);
+Route::get('featured-items', [ApiController::class, 'getFeaturedItems']);

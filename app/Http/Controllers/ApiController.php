@@ -103,6 +103,7 @@ class ApiController extends Controller
             'getCorporatePackageItems',
             'getExperienceItems',
             'getNewestItems',
+            'getFeaturedItems'
         ]);
     }
 
@@ -286,7 +287,11 @@ class ApiController extends Controller
                 'categories'            => 'nullable|string',
                 'phone'                 => 'nullable|string',
                 'city'                  => 'nullable|string',
-                'bio'                   => 'nullable|string'
+                'bio'                   => 'nullable|string',
+                'facebook'              => 'nullable|string',
+                'twitter'               => 'nullable|string',
+                'instagram'             => 'nullable|string',
+                'tiktok'                => 'nullable|string'
             ]);
 
             Log::info('Update Profile Request', $request->all());
@@ -2861,7 +2866,7 @@ class ApiController extends Controller
 
         try {
             // Check if the user is trying to review themselves
-            if ($request->user_id == Auth::id()) {
+            if ($request->user_id == Auth::id()) {  
                 ResponseService::errorResponse("You cannot review yourself.");
             }
 
@@ -3093,6 +3098,64 @@ class ApiController extends Controller
         }
         
         return 'regular';
+    }
+
+    /**
+     * Get all featured items that are currently active
+     */
+    public function getFeaturedItems(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'limit'  => 'nullable|integer',
+            'offset' => 'nullable|integer',
+        ]);
+
+        if ($validator->fails()) {
+            return ResponseService::validationError($validator->errors()->first());
+        }
+        
+        try {
+            // Get items that have active featured entries
+            $sql = Item::with('user:id,name,email,mobile,profile,created_at,is_verified,show_personal_details,country_code,gender', 
+                            'category:id,name,image', 
+                            'gallery_images:id,image,item_id', 
+                            'featured_items', 
+                            'favourites', 
+                            'item_custom_field_values.custom_field', 
+                            'area:id,name')
+                ->withCount('favourites')
+                ->select('items.*')
+                ->whereHas('featured_items', function($query) {
+                    // Only get items with active featured entries
+                    $query->whereDate('start_date', '<=', date('Y-m-d'))
+                          ->where(function ($q) {
+                              $q->whereDate('end_date', '>=', date('Y-m-d'))
+                                ->orWhereNull('end_date');
+                          });
+                })
+                ->whereIn('status', ['approved', 'review']) // Include both approved and review items
+                ->orderBy('updated_at', 'desc'); // Most recently updated first
+            
+            // Apply pagination
+            $total = $sql->count();
+            $items = $sql->skip($request->offset ?? 0)
+                ->take($request->limit ?? 10)
+                ->get();
+            
+            // Process each item
+            foreach ($items as $item) {
+                $this->determineSpecialTags($item);
+                $this->determineServiceType($item);
+            }
+            
+            return ResponseService::successResponse('Featured items retrieved successfully', [
+                'items' => $items,
+                'total' => $total
+            ]);
+        } catch (\Exception $e) {
+            Log::error('getFeaturedItems error: ' . $e->getMessage());
+            return ResponseService::errorResponse('Something went wrong');
+        }
     }
 }
             

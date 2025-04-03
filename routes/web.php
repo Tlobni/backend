@@ -180,7 +180,7 @@ Route::group(['middleware' => ['auth', 'language']], static function () {
 
     /*** Item Module : START ***/
     Route::group(['prefix' => 'item'], static function () {
-        Route::put('/{id}/approval', [ItemController::class, 'updateItemApproval'])->name('item.approval');
+        Route::match(['post', 'put'], '/{id}/approval', [ItemController::class, 'updateItemApproval'])->name('item.approval');
     });
     Route::resource('item', ItemController::class);
     /*** Item Module : END ***/

@@ -44,7 +44,11 @@ class User extends Authenticatable
         'location',
         'platform_type',
         'provider_type',
-        'status'
+        'status',
+        'facebook',
+        'twitter',
+        'instagram',
+        'tiktok'
     ];
 
     /**

@@ -107,8 +107,17 @@
                     <div class="modal-body">
                         <form id="edit-status-form" class="edit-form" action="" method="POST">
                             @csrf
-                            <!-- Explicitly specify POST method -->
-                            <input type="hidden" name="_method" value="POST">
+                            <!-- Featured option -->
+                            <div class="row mb-3">
+                                <div class="col-md-12">
+                                    <label for="is_featured" class="form-label">{{ __('Featured Item') }}</label>
+                                    <select class="form-select" id="is_featured" name="is_featured">
+                                        <option value="0">{{ __('No') }}</option>
+                                        <option value="1">{{ __('Yes') }}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
                             <div class="row">
                                 <div class="col-md-12">
                                     <select name="status" class="form-select" id="status" aria-label="status">
@@ -154,8 +163,8 @@
     }
     
     function featuredFormatter(value, row) {
-        if (row.show_only_to_premium) {
-            return '<span class="badge bg-primary">Premium</span>';
+        if (value && value.length > 0) {
+            return '<span class="badge bg-success">Featured</span>';
         }
         return '-';
     }
@@ -207,7 +216,21 @@
             e.preventDefault();
             var form = $(this);
             var url = form.attr('action');
-            var formData = form.serialize();
+            
+            // Get the featured value
+            var isFeatured = $('#is_featured').val();
+            
+            // Build the form data
+            var formData = {
+                _token: $('meta[name="csrf-token"]').attr('content'),
+                status: $('#status').val(),
+                is_featured: isFeatured,
+            };
+            
+            // Add rejected reason if present
+            if ($('#status').val() === 'rejected') {
+                formData.rejected_reason = $('#rejected_reason').val();
+            }
             
             // Log for debugging
             console.log('Form action:', url);
@@ -217,17 +240,28 @@
             
             $.ajax({
                 url: url,
-                type: 'POST',
+                type: 'PUT',
                 data: formData,
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
                 success: function(response) {
                     if (response.success) {
-                        toastr.success(response.message);
+                        // Check if toastr is defined
+                        if (typeof toastr !== 'undefined') {
+                            toastr.success(response.message);
+                        } else {
+                            alert('Success: ' + response.message);
+                        }
                         $('#editStatusModal').modal('hide');
                         $('#table_list').bootstrapTable('refresh');
                     } else {
-                        toastr.error(response.message);
+                        if (typeof toastr !== 'undefined') {
+                            toastr.error(response.message);
+                        } else {
+                            alert(response.message);
+                        }
                         $('#status-error-message').text(response.message).show();
-                    }
                 },
                 error: function(xhr) {
                     console.error(xhr.responseText);
@@ -235,7 +269,11 @@
                     if (xhr.responseJSON && xhr.responseJSON.message) {
                         errorMessage = xhr.responseJSON.message;
                     }
-                    toastr.error(errorMessage);
+                    if (typeof toastr !== 'undefined') {
+                        toastr.error(errorMessage);
+                    } else {
+                        alert(errorMessage);
+                    }
                     $('#status-error-message').text(errorMessage).show();
                 }
             });
@@ -262,12 +300,18 @@
             });
         },
         'click .change-status': function (e, value, row, index) {
-            // Set the form action URL and reset previous state - use absolute path
-            $('#edit-status-form').attr('action', '/item/approval/' + row.id);
+            // Set the form action URL using Laravel's route helper
+            $('#edit-status-form').attr('action', '{{ route("item.approval", ":id") }}'.replace(':id', row.id));
             $('#status-error-message').hide();
             
             // Set the current status value
             $('#status').val(row.status);
+            
+            // Check if item has featured_items entries
+            let isFeatured = row.featured_items && row.featured_items.length > 0 ? '1' : '0';
+            
+            // Set the featured dropdown
+            $('#is_featured').val(isFeatured);
             
             // Handle rejected reason container visibility
             if (row.status === 'rejected') {

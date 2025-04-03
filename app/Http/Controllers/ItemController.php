@@ -14,6 +14,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 use App\Models\Notifications;
+use App\Models\FeaturedItems;
+use App\Models\UserPurchasedPackage;
+use Illuminate\Support\Facades\Log;
 
 class ItemController extends Controller {
 
@@ -54,7 +57,7 @@ class ItemController extends Controller {
             $sort = $request->input('sort', 'sequence');
             $order = $request->input('order', 'ASC');
             
-            $sql = Item::with(['custom_fields', 'category:id,name', 'user:id,name', 'gallery_images'])
+            $sql = Item::with(['custom_fields', 'category:id,name', 'user:id,name', 'gallery_images', 'featured_items'])
                       ->where('provider_item_type', $type)
                       ->withTrashed();
                       
@@ -130,7 +133,7 @@ class ItemController extends Controller {
             $limit = $request->input('limit', 10);
             $sort = $request->input('sort', 'sequence');
             $order = $request->input('order', 'ASC');
-            $sql = Item::with(['custom_fields', 'category:id,name', 'user:id,name', 'gallery_images'])->withTrashed();
+            $sql = Item::with(['custom_fields', 'category:id,name', 'user:id,name', 'gallery_images', 'featured_items'])->withTrashed();
             if (!empty($request->search)) {
                 $sql = $sql->search($request->search);
             }
@@ -199,7 +202,7 @@ class ItemController extends Controller {
     public function showItem($id) {
         try {
             ResponseService::noPermissionThenSendJson('item-list');
-            $item = Item::with(['custom_fields', 'category:id,name', 'user:id,name', 'gallery_images'])->findOrFail($id);
+            $item = Item::with(['custom_fields', 'category:id,name', 'user:id,name', 'gallery_images', 'featured_items'])->findOrFail($id);
             return response()->json($item);
         } catch (Throwable $th) {
             ResponseService::logErrorResponse($th, "ItemController --> showItem");
@@ -211,10 +214,115 @@ class ItemController extends Controller {
         try {
             ResponseService::noPermissionThenSendJson('item-update');
             $item = Item::with('user')->withTrashed()->findOrFail($id);
-            $item->update([
-                ...$request->all(),
-                'rejected_reason' => ($request->status == "rejected") ? $request->rejected_reason : ''
-            ]);
+            
+            // Log the incoming request data for debugging
+            Log::info('Item approval update request:', ['id' => $id, 'data' => $request->all()]);
+            
+            // Update the item with all request data except is_featured (handle separately)
+            $updateData = $request->except('is_featured');
+            $updateData['rejected_reason'] = ($request->status == "rejected") ? $request->rejected_reason : '';
+            
+            $item->update($updateData);
+            
+            // Handle featured status
+            if ($request->has('is_featured')) {
+                Log::info('Featured status update:', ['is_featured' => $request->is_featured, 'item_id' => $id]);
+                
+                // Convert to boolean/integer for consistency
+                $is_featured = filter_var($request->is_featured, FILTER_VALIDATE_BOOLEAN) || $request->is_featured === '1' || $request->is_featured === 1;
+                
+                if ($is_featured) {
+                    // Check if an entry already exists in featured_items
+                    $featuredItem = FeaturedItems::where('item_id', $id)->first();
+                    
+                    if (!$featuredItem) {
+                        // First try to get an advertisement package for the admin
+                        $userPackage = UserPurchasedPackage::where('user_id', Auth::id())
+                            ->whereHas('package', function ($q) {
+                                $q->where('type', 'advertisement');
+                            })
+                            ->first();
+                        
+                        // If no package found for admin, get first advertisement package in the system
+                        if (!$userPackage) {
+                            Log::warning('No valid user purchased package found for featuring item:', ['item_id' => $id]);
+                            
+                            // Find any user with an advertisement package to use
+                            $anyUserPackage = UserPurchasedPackage::whereHas('package', function ($q) {
+                                $q->where('type', 'advertisement');
+                            })->first();
+                            
+                            if ($anyUserPackage) {
+                                Log::info('Using existing user package for featuring:', ['package_id' => $anyUserPackage->package_id]);
+                                
+                                // Use an existing user's package
+                                FeaturedItems::create([
+                                    'item_id' => $id,
+                                    'package_id' => $anyUserPackage->package_id,
+                                    'user_purchased_package_id' => $anyUserPackage->id,
+                                    'start_date' => date('Y-m-d'),
+                                    'end_date' => $anyUserPackage->end_date
+                                ]);
+                            } else {
+                                // No packages found in the system, let's create one for the admin
+                                Log::info('No packages found, creating default package for admin');
+                                
+                                // Find or create a default advertisement package
+                                $package = \App\Models\Package::firstOrCreate(
+                                    ['type' => 'advertisement'],
+                                    [
+                                        'name' => 'Default Admin Ad Package',
+                                        'price' => 0,
+                                        'duration' => 30, // 30 days by default
+                                        'status' => 1,
+                                    ]
+                                );
+                                
+                                // Create a user purchased package for the admin
+                                $adminPackage = UserPurchasedPackage::create([
+                                    'user_id' => Auth::id(),
+                                    'package_id' => $package->id,
+                                    'price' => 0,
+                                    'start_date' => date('Y-m-d'),
+                                    'end_date' => date('Y-m-d', strtotime('+30 days')),
+                                    'payment_method' => 'system',
+                                    'status' => 'completed'
+                                ]);
+                                
+                                Log::info('Created default admin package:', ['package_id' => $package->id, 'user_package_id' => $adminPackage->id]);
+                                
+                                // Now use this package to feature the item
+                                FeaturedItems::create([
+                                    'item_id' => $id,
+                                    'package_id' => $package->id,
+                                    'user_purchased_package_id' => $adminPackage->id,
+                                    'start_date' => date('Y-m-d'),
+                                    'end_date' => $adminPackage->end_date
+                                ]);
+                            }
+                        } else {
+                            Log::info('Using admin package for featuring item:', ['package_id' => $userPackage->package_id]);
+                            
+                            // Create new featured item entry with admin's package
+                            FeaturedItems::create([
+                                'item_id' => $id,
+                                'package_id' => $userPackage->package_id,
+                                'user_purchased_package_id' => $userPackage->id,
+                                'start_date' => date('Y-m-d'),
+                                'end_date' => $userPackage->end_date
+                            ]);
+                        }
+                    } else {
+                        Log::info('Item already featured:', ['featured_item_id' => $featuredItem->id]);
+                    }
+                } else {
+                    // Remove featured item entries for this item
+                    $deleted = FeaturedItems::where('item_id', $id)->delete();
+                    Log::info('Removed featured status:', ['item_id' => $id, 'deleted_count' => $deleted]);
+                }
+            }
+            
+            // Send notifications
             $user_token = UserFcmToken::where('user_id', $item->user->id)->pluck('fcm_token')->toArray();
             
             // Create notification in the database
@@ -227,17 +335,20 @@ class ItemController extends Controller {
                 'message' => $notificationMessage,
                 'item_id' => $item->id,
                 'user_id' => $item->user->id,
-                'send_to' => 'selected'
+                'send_to' => 'selected',
+                'image' => ''
             ]);
             
             // Send FCM notification
             if (!empty($user_token)) {
                 NotificationService::sendFcmNotification($user_token, $notificationTitle, $notificationMessage, "item-update", ['id' => $item->id]);
             }
-            ResponseService::successResponse('Item Status Updated Successfully');
+            
+            return ResponseService::successResponse('Item Updated Successfully');
         } catch (Throwable $th) {
+            Log::error('Error in updateItemApproval:', ['exception' => $th->getMessage(), 'trace' => $th->getTraceAsString()]);
             ResponseService::logErrorResponse($th, 'ItemController ->updateItemApproval');
-            ResponseService::errorResponse('Something Went Wrong');
+            return ResponseService::errorResponse('Something Went Wrong: ' . $th->getMessage());
         }
     }
 
