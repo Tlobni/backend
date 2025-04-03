@@ -1728,7 +1728,24 @@ class ApiController extends Controller
             ResponseService::validationError($validator->errors()->first());
         }
         try {
-            $item = Item::approved()->notOwner()->findOrFail($request->item_id);
+            // First check if the item exists at all
+            $itemExists = Item::where('id', $request->item_id)->exists();
+            if (!$itemExists) {
+                return ResponseService::errorResponse('Item not found', 404);
+            }
+            
+            // Then check if the item meets the required criteria
+            $item = Item::where('id', $request->item_id)->first();
+            
+            // Verify item is approved
+            if (!$item->is_approved) {
+                return ResponseService::errorResponse('Item is not approved', 403);
+            }
+            
+            // Verify user is not the owner
+            if ($item->user_id == Auth::user()->id) {
+                return ResponseService::errorResponse('You cannot make an offer on your own item', 403);
+            }
 
             // Set default amount to 0 if not provided
             $amount = $request->has('amount') ? $request->amount : 0;
@@ -1752,8 +1769,6 @@ class ApiController extends Controller
                 'item_price'        => $itemOffer->item->price,
                 'item_offer_id'     => $itemOffer->id,
                 'item_offer_amount' => $itemOffer->amount,
-                // 'type'              => $notificationPayload['message_type'],
-                // 'message_type_temp' => $notificationPayload['message_type']
             ];
             /* message_type is reserved keyword in FCM so removed here*/
             unset($fcmMsg['message_type']);
@@ -1761,7 +1776,7 @@ class ApiController extends Controller
             // Wrap FCM notification in try-catch to handle potential configuration errors
             try {
                 // Get user tokens and send notification
-                $user_token = UserFcmToken::where('user_id', $item->user->id)->pluck('fcm_token')->toArray();
+                $user_token = UserFcmToken::where('user_id', $item->user_id)->pluck('fcm_token')->toArray();
                 $message = 'New chat request from buyer';
                 NotificationService::sendFcmNotification($user_token, 'New Chat Request', $message, "offer", $fcmMsg);
             } catch (Throwable $fcmError) {
