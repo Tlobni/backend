@@ -2620,6 +2620,7 @@ class ApiController extends Controller
                             'area:id,name')
                 ->withCount('favourites')
                 ->select('items.*')
+                ->where('status', 'approved')
                 ->whereRaw("JSON_EXTRACT(special_tags, '$.exclusive_women') = 'true'");
                 
             // Handle sorting
@@ -2672,6 +2673,7 @@ class ApiController extends Controller
                             'area:id,name')
                 ->withCount('favourites')
                 ->select('items.*')
+                ->where('status', 'approved')
                 ->whereRaw("JSON_EXTRACT(special_tags, '$.corporate_package') = 'true'");
                 
             // Handle sorting
@@ -2753,6 +2755,7 @@ class ApiController extends Controller
                             'area:id,name')
                 ->withCount('favourites')
                 ->select('items.*')
+                ->where('status', 'approved')
                 ->where(function($query) {
                     // Check provider_item_type field with multiple ways to identify experiences
                     $query->where('provider_item_type', '=', 'experience')
@@ -2826,6 +2829,7 @@ class ApiController extends Controller
                             'area:id,name')
                 ->withCount('favourites')
                 ->select('items.*')
+                ->where('status', 'approved')
                 ->orderBy('created_at', 'desc'); // Always sort by newest first
             
             // Apply pagination
@@ -3149,6 +3153,7 @@ class ApiController extends Controller
                             'area:id,name')
                 ->withCount('favourites')
                 ->select('items.*')
+                ->where('status', 'approved')
                 ->whereHas('featured_items', function($query) {
                     // Only get items with active featured entries
                     $query->whereDate('start_date', '<=', date('Y-m-d'))
