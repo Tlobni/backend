@@ -1722,7 +1722,6 @@ class ApiController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'item_id' => 'required|integer',
-            // Make amount optional, will default to 0
             'amount'  => 'nullable|numeric',
         ]);
         if ($validator->fails()) {
@@ -1759,10 +1758,20 @@ class ApiController extends Controller
             /* message_type is reserved keyword in FCM so removed here*/
             unset($fcmMsg['message_type']);
 
-            // Always send notification regardless of amount
-            $user_token = UserFcmToken::where('user_id', $item->user->id)->pluck('fcm_token')->toArray();
-            $message = 'New chat request from buyer';
-            NotificationService::sendFcmNotification($user_token, 'New Chat Request', $message, "offer", $fcmMsg);
+            // Wrap FCM notification in try-catch to handle potential configuration errors
+            try {
+                // Get user tokens and send notification
+                $user_token = UserFcmToken::where('user_id', $item->user->id)->pluck('fcm_token')->toArray();
+                $message = 'New chat request from buyer';
+                NotificationService::sendFcmNotification($user_token, 'New Chat Request', $message, "offer", $fcmMsg);
+            } catch (Throwable $fcmError) {
+                // Log the FCM error but continue with the rest of the process
+                Log::error('FCM Notification failed: ' . $fcmError->getMessage(), [
+                    'file' => $fcmError->getFile(),
+                    'line' => $fcmError->getLine()
+                ]);
+                // We don't re-throw the exception as the main functionality (creating an offer) succeeded
+            }
 
             ResponseService::successResponse("Chat request sent successfully", $itemOffer);
         } catch (Throwable $th) {
