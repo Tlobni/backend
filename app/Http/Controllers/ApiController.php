@@ -60,6 +60,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
 use Throwable;
 use Illuminate\Support\Facades\Schema;
+use App\Models\FeaturedUsers;
 
 class ApiController extends Controller
 {
@@ -103,7 +104,8 @@ class ApiController extends Controller
             'getCorporatePackageItems',
             'getExperienceItems',
             'getNewestItems',
-            'getFeaturedItems'
+            'getFeaturedItems',
+            'getFeaturedUsers'
         ]);
     }
 
@@ -3177,13 +3179,222 @@ class ApiController extends Controller
                 $this->determineServiceType($item);
             }
             
-            return ResponseService::successResponse('Featured items retrieved successfully', [
-                'items' => $items,
-                'total' => $total
+            return ResponseService::successResponse('Featured items fetched successfully', [
+                'total' => $total,
+                'data' => $items
             ]);
-        } catch (\Exception $e) {
-            Log::error('getFeaturedItems error: ' . $e->getMessage());
-            return ResponseService::errorResponse('Something went wrong');
+        } catch (Throwable $th) {
+            ResponseService::logErrorResponse($th, "API Controller -> getFeaturedItems");
+            return ResponseService::errorResponse();
+        }
+    }
+    
+    /**
+     * Make a user featured by current user's advertisement package
+     */
+    public function makeUserFeatured(Request $request)
+    {
+        try {
+            DB::beginTransaction();
+            
+            $validator = Validator::make($request->all(), [
+                'user_id' => 'required|exists:users,id',
+            ]);
+            
+            if ($validator->fails()) {
+                return ResponseService::validationError($validator->errors()->first());
+            }
+            
+            $user = Auth::user();
+            $targetUser = User::findOrFail($request->user_id);
+            
+            // Check if target user is Business or Expert
+            if (!$targetUser->hasRole(['Business', 'Expert'])) {
+                return ResponseService::errorResponse("Only Business and Expert users can be featured");
+            }
+            
+            // Get active advertisement package for current user
+            $userPackage = UserPurchasedPackage::onlyActive()
+                ->where(['user_id' => $user->id])
+                ->with('package')
+                ->whereHas('package', function ($q) {
+                    $q->where(['type' => 'advertisement']);
+                })
+                ->first();
+            
+            if (!$userPackage) {
+                return ResponseService::errorResponse("You don't have an active advertisement package");
+            }
+            
+            // Check if user is already featured with this package
+            $featuredUser = FeaturedUsers::where([
+                'user_id' => $request->user_id, 
+                'package_id' => $userPackage->package_id
+            ])->first();
+            
+            if ($featuredUser) {
+                return ResponseService::errorResponse("User is already featured");
+            }
+            
+            // Increment used limit of package
+            $userPackage->used_limit++;
+            $userPackage->save();
+            
+            // Create featured user entry
+            FeaturedUsers::create([
+                'user_id' => $request->user_id,
+                'package_id' => $userPackage->package_id,
+                'user_purchased_package_id' => $userPackage->id,
+                'start_date' => date('Y-m-d'),
+                'end_date' => $userPackage->end_date
+            ]);
+            
+            DB::commit();
+            return ResponseService::successResponse("User featured successfully");
+        } catch (Throwable $th) {
+            DB::rollBack();
+            ResponseService::logErrorResponse($th, "API Controller -> makeUserFeatured");
+            return ResponseService::errorResponse();
+        }
+    }
+    
+    /**
+     * Get all featured users that are currently active
+     */
+    public function getFeaturedUsers(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'limit' => 'nullable|integer',
+            'offset' => 'nullable|integer',
+            'role' => 'nullable|in:Business,Expert'
+        ]);
+        
+        if ($validator->fails()) {
+            return ResponseService::validationError($validator->errors()->first());
+        }
+        
+        try {
+            // Get users that have active featured entries
+            $sql = User::with([
+                    'items', 
+                    'featured_users', 
+                    'roles'
+                ])
+                ->select('users.*')
+                ->whereHas('featured_users', function($query) {
+                    // Only get users with active featured entries
+                    $query->whereDate('start_date', '<=', date('Y-m-d'))
+                          ->where(function ($q) {
+                              $q->whereDate('end_date', '>=', date('Y-m-d'))
+                                ->orWhereNull('end_date');
+                          });
+                });
+
+            // Log the initial query
+            Log::info('Featured users initial query built');
+                
+            // Filter by role if provided
+            if ($request->has('role')) {
+                $sql->role($request->role);
+                Log::info('Filtering by role: ' . $request->role);
+            } else {
+                // Otherwise just get Business and Expert users
+                $sql->whereHas('roles', function($query) {
+                    $query->whereIn('name', ['Business', 'Expert']);
+                });
+                Log::info('Filtering by Business and Expert roles');
+            }
+            
+            // Apply pagination
+            $total = $sql->count();
+            Log::info('Found ' . $total . ' featured users');
+            
+            $users = $sql->skip($request->offset ?? 0)
+                ->take($request->limit ?? 10)
+                ->get();
+            
+            Log::info('Retrieved ' . count($users) . ' featured users after pagination');
+            
+            // If we have no users, check if there are any featured users at all
+            if (count($users) === 0) {
+                $totalFeaturedUsersCount = FeaturedUsers::count();
+                Log::info('Total featured_users entries in database: ' . $totalFeaturedUsersCount);
+                
+                // Check if the issue is with active date filtering
+                $activeFeaturedUsersCount = FeaturedUsers::whereDate('start_date', '<=', date('Y-m-d'))
+                    ->where(function ($q) {
+                        $q->whereDate('end_date', '>=', date('Y-m-d'))
+                            ->orWhereNull('end_date');
+                    })
+                    ->count();
+                Log::info('Active featured_users entries in database: ' . $activeFeaturedUsersCount);
+            }
+            
+            // Process each user to include needed fields
+            $processedUsers = [];
+            foreach ($users as $user) {
+                // Add user type information
+                $user->user_type = $this->determineUserType($user);
+                
+                // Explicitly set the featured status
+                $user->is_featured = true;
+                
+                // Add the user to the processed array with necessary fields
+                $userData = $user->toArray();
+                $userData['is_featured'] = true;
+                $userData['featured_users_count'] = count($user->featured_users);
+                $userData['roles'] = $user->roles->pluck('name')->toArray();
+                $userData['items_count'] = $user->items->count();
+                
+                // Process categories: Convert comma-separated IDs to names
+                if (!empty($userData['categories'])) {
+                    $categoryIds = explode(',', $userData['categories']);
+                    $categoryNames = [];
+                    
+                    // Fetch category names from database
+                    if (!empty($categoryIds)) {
+                        $categories = \App\Models\Category::whereIn('id', $categoryIds)->get();
+                        foreach ($categories as $category) {
+                            $categoryNames[] = $category->name;
+                        }
+                        // Keep original category IDs but add names
+                        $userData['category_ids'] = $userData['categories'];
+                        $userData['categories'] = implode(', ', $categoryNames);
+                        $userData['categories_array'] = $categoryNames;
+                    }
+                }
+                
+                // Process each item to add category name
+                if (!empty($userData['items'])) {
+                    $itemCategoryIds = array_unique(array_column($userData['items'], 'category_id'));
+                    
+                    // Fetch all needed category names at once
+                    $itemCategories = \App\Models\Category::whereIn('id', $itemCategoryIds)->pluck('name', 'id')->toArray();
+                    
+                    // Add category name to each item
+                    foreach ($userData['items'] as $key => $item) {
+                        if (isset($item['category_id']) && isset($itemCategories[$item['category_id']])) {
+                            $userData['items'][$key]['category_name'] = $itemCategories[$item['category_id']];
+                        } else {
+                            $userData['items'][$key]['category_name'] = null;
+                        }
+                    }
+                }
+                
+                $processedUsers[] = $userData;
+            }
+            
+            Log::info('Processed ' . count($processedUsers) . ' users with additional fields');
+            
+            // Return the data directly instead of using the UserCollection resource
+            return ResponseService::successResponse('Featured users fetched successfully', [
+                'total' => $total,
+                'data' => $processedUsers
+            ]);
+        } catch (Throwable $th) {
+            Log::error('Error in getFeaturedUsers: ' . $th->getMessage());
+            ResponseService::logErrorResponse($th, "API Controller -> getFeaturedUsers");
+            return ResponseService::errorResponse();
         }
     }
 }

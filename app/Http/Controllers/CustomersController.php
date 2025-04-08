@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Throwable;
 use App\Models\Category;
+use App\Models\FeaturedUsers;
 
 class CustomersController extends Controller {
     public function index() {
@@ -219,6 +220,13 @@ class CustomersController extends Controller {
         // Get the user role from the request, default to 'Client' if not specified
         $role = $request->role ?? 'Client';
         
+        // Normalize role to ensure capitalization is consistent (Expert vs expert)
+        if (strtolower($role) === 'expert') {
+            $role = 'Expert';
+        } else if (strtolower($role) === 'business') {
+            $role = 'Business';
+        }
+        
         // Debug the request parameters
         Log::info('List by role request', [
             'role' => $role,
@@ -241,16 +249,13 @@ class CustomersController extends Controller {
 
         // Important: Include soft deleted users so they appear in the table with inactive status
         $sql = $sql->withTrashed();
+        
+        // Always include the featured_users relationship for checking featured status
+        $sql = $sql->with('featured_users');
 
-        // We'll check for relationships in a safer way
-        try {
-            // Add relationships based on role if they exist
-            if ($role === 'Expert' || $role === 'Business') {
-                // For Experts and Business, include their services/experiences if the relationship exists
-                $sql = $sql->with(['items', 'user_purchased_packages.package']);
-            }
-        } catch (\Exception $e) {
-            Log::error('Error loading relationships: ' . $e->getMessage());
+        // Add additional relationships based on role
+        if ($role === 'Expert' || $role === 'Business') {
+            $sql = $sql->with(['items', 'user_purchased_packages.package']);
         }
 
         $total = $sql->count();
@@ -309,6 +314,17 @@ class CustomersController extends Controller {
                 $tempRow['experience'] = ''; // Not in database
                 $tempRow['services_count'] = isset($row->items) ? count($row->items) : 0;
                 $tempRow['has_subscription'] = false; // Default to false since we can't check
+                
+                // Check featured status more explicitly and log it
+                $isFeatured = isset($row->featured_users) && is_countable($row->featured_users) && count($row->featured_users) > 0;
+                Log::info('Expert user featured status check for ID ' . $row->id . ':', [
+                    'user_id' => $row->id,
+                    'is_featured' => $isFeatured,
+                    'featured_users_count' => isset($row->featured_users) ? count($row->featured_users) : 0,
+                    'featured_users' => $row->featured_users ? $row->featured_users->toArray() : []
+                ]);
+                $tempRow['is_featured'] = $isFeatured;
+                
             } elseif ($role === 'Business') {
                 // Business-specific fields
                 $tempRow['business_name'] = $row->name;
@@ -317,6 +333,17 @@ class CustomersController extends Controller {
                 $tempRow['phone'] = $row->phone ?? '';
                 $tempRow['services_count'] = isset($row->items) ? count($row->items) : 0;
                 $tempRow['has_subscription'] = false; // Default to false since we can't check
+                
+                // Check featured status more explicitly and log it
+                $isFeatured = isset($row->featured_users) && is_countable($row->featured_users) && count($row->featured_users) > 0;
+                Log::info('Business user featured status check for ID ' . $row->id . ':', [
+                    'user_id' => $row->id,
+                    'is_featured' => $isFeatured,
+                    'featured_users_count' => isset($row->featured_users) ? count($row->featured_users) : 0,
+                    'featured_users' => $row->featured_users ? $row->featured_users->toArray() : []
+                ]);
+                $tempRow['is_featured'] = $isFeatured;
+                
             } elseif ($role === 'Client') {
                 // Client-specific fields
                 $tempRow['gender'] = ''; // Not in database
@@ -702,5 +729,196 @@ class CustomersController extends Controller {
             'success' => true,
             'data' => $categories
         ]);
+    }
+
+    /**
+     * Toggle featured status for a user
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function toggleFeatured(Request $request) {
+        ResponseService::noPermissionThenSendJson('customer-update');
+        
+        try {
+            DB::beginTransaction();
+            
+            $validator = Validator::make($request->all(), [
+                'user_id' => 'required|exists:users,id',
+                'is_featured' => 'required|boolean'
+            ]);
+            
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => true,
+                    'message' => $validator->errors()->first()
+                ]);
+            }
+            
+            // Use withTrashed to find possibly soft-deleted users
+            $user = User::withTrashed()->findOrFail($request->user_id);
+            
+            // Check if user is soft-deleted (inactive)
+            if ($user->trashed()) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'Cannot feature inactive users. Please activate the user first.'
+                ]);
+            }
+            
+            // Check if user is Business or Expert
+            if (!$user->hasRole(['Business', 'Expert'])) {
+                return response()->json([
+                    'error' => true,
+                    'message' => 'Only Business and Expert users can be featured'
+                ]);
+            }
+            
+            // Get user's role for specific handling
+            $userRoles = $user->getRoleNames();
+            $role = $userRoles->contains('Expert') ? 'Expert' : 'Business';
+            
+            // Log user info for debugging
+            Log::info('Toggle featured for user:', [
+                'user_id' => $request->user_id,
+                'roles' => $userRoles,
+                'role' => $role,
+                'is_featured' => $request->is_featured
+            ]);
+            
+            // Check current featured status directly from the database
+            $existingFeatured = FeaturedUsers::where('user_id', $request->user_id)->first();
+            Log::info('Current featured status in database:', [
+                'user_id' => $request->user_id,
+                'has_featured_entry' => !empty($existingFeatured),
+                'entry_id' => $existingFeatured->id ?? null
+            ]);
+            
+            if ($request->is_featured) {
+                // Check if an entry already exists in featured_users
+                if (!$existingFeatured) {
+                    // First try to get an advertisement package for the admin
+                    $userPackage = UserPurchasedPackage::where('user_id', auth()->id())
+                        ->whereHas('package', function ($q) {
+                            $q->where('type', 'advertisement');
+                        })
+                        ->first();
+                    
+                    // If no package found for admin, get first advertisement package in the system
+                    if (!$userPackage) {
+                        Log::warning('No valid user purchased package found for featuring user:', ['user_id' => $request->user_id]);
+                        
+                        // Find any user with an advertisement package to use
+                        $anyUserPackage = UserPurchasedPackage::whereHas('package', function ($q) {
+                            $q->where('type', 'advertisement');
+                        })->first();
+                        
+                        if ($anyUserPackage) {
+                            Log::info('Using existing user package for featuring:', ['package_id' => $anyUserPackage->package_id]);
+                            
+                            // Use an existing user's package
+                            $featured = FeaturedUsers::create([
+                                'user_id' => $request->user_id,
+                                'package_id' => $anyUserPackage->package_id,
+                                'user_purchased_package_id' => $anyUserPackage->id,
+                                'start_date' => date('Y-m-d'),
+                                'end_date' => $anyUserPackage->end_date
+                            ]);
+                            
+                            Log::info('Created featured entry:', ['id' => $featured->id]);
+                        } else {
+                            // If no advertisement package exists in the system, get the first advertisement package
+                            $package = Package::where('type', 'advertisement')->first();
+                            
+                            if (!$package) {
+                                DB::rollBack();
+                                return response()->json([
+                                    'error' => true,
+                                    'message' => 'No advertisement package found in the system'
+                                ]);
+                            }
+                            
+                            // Create a user purchased package for the admin
+                            $adminPackage = UserPurchasedPackage::create([
+                                'user_id' => auth()->id(),
+                                'package_id' => $package->id,
+                                'start_date' => date('Y-m-d'),
+                                'end_date' => date('Y-m-d', strtotime('+30 days')),
+                                'total_limit' => 10,
+                                'used_limit' => 1,
+                                'status' => 1
+                            ]);
+                            
+                            // Create new featured user entry
+                            $featured = FeaturedUsers::create([
+                                'user_id' => $request->user_id,
+                                'package_id' => $package->id,
+                                'user_purchased_package_id' => $adminPackage->id,
+                                'start_date' => date('Y-m-d'),
+                                'end_date' => $adminPackage->end_date
+                            ]);
+                            
+                            Log::info('Created featured entry with new package:', ['id' => $featured->id]);
+                        }
+                    } else {
+                        Log::info('Using admin package for featuring user:', ['package_id' => $userPackage->package_id]);
+                        
+                        // Create new featured user entry with admin's package
+                        $featured = FeaturedUsers::create([
+                            'user_id' => $request->user_id,
+                            'package_id' => $userPackage->package_id,
+                            'user_purchased_package_id' => $userPackage->id,
+                            'start_date' => date('Y-m-d'),
+                            'end_date' => $userPackage->end_date
+                        ]);
+                        
+                        Log::info('Created featured entry with admin package:', ['id' => $featured->id]);
+                    }
+                    
+                    // Log success
+                    Log::info('User featured successfully:', ['user_id' => $request->user_id]);
+                } else {
+                    Log::info('User already featured:', ['featured_user_id' => $existingFeatured->id]);
+                }
+            } else {
+                // Remove featured user entries for this user
+                $deleted = FeaturedUsers::where('user_id', $request->user_id)->delete();
+                Log::info('Removed featured status:', ['user_id' => $request->user_id, 'deleted_count' => $deleted]);
+            }
+            
+            DB::commit();
+            
+            // Verify the current state after the transaction
+            $finalStatus = FeaturedUsers::where('user_id', $request->user_id)->exists();
+            Log::info('Final featured status check:', [
+                'user_id' => $request->user_id, 
+                'is_featured' => $finalStatus,
+                'matches_request' => $finalStatus == $request->is_featured
+            ]);
+            
+            return response()->json([
+                'error' => false,
+                'message' => $request->is_featured ? 'User featured successfully' : 'User unfeatured successfully',
+                'success' => true,
+                'user_id' => $request->user_id,
+                'is_featured' => $finalStatus, // Send back the actual state to the frontend
+                'role' => $role
+            ]);
+        } catch (Throwable $th) {
+            DB::rollBack();
+            Log::error('Error in toggleFeatured:', [
+                'user_id' => $request->user_id ?? 'unknown',
+                'is_featured' => $request->is_featured ?? 'unknown',
+                'exception' => $th->getMessage(),
+                'file' => $th->getFile(),
+                'line' => $th->getLine(),
+                'trace' => $th->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'error' => true,
+                'message' => 'An error occurred: ' . $th->getMessage()
+            ]);
+        }
     }
 }

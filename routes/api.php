@@ -65,6 +65,9 @@ Route::group(['middleware' => ['auth:sanctum', 'auth.status']], static function 
     Route::get('verification-fields', [ApiController::class, 'getVerificationFields']);
     Route::post('send-verification-request',[ApiController::class,'sendVerificationRequest']);
     Route::get('verification-request',[ApiController::class,'getVerificationRequest']);
+
+    // Featured users
+    Route::post('make-user-featured', [ApiController::class, 'makeUserFeatured']);
 });
 
 /* Non Authenticated Routes */
@@ -100,3 +103,4 @@ Route::get('exclusive-women-items', [ApiController::class, 'getExclusiveWomenIte
 Route::get('corporate-package-items', [ApiController::class, 'getCorporatePackageItems']);
 Route::get('newest-items', [ApiController::class, 'getNewestItems']);
 Route::get('featured-items', [ApiController::class, 'getFeaturedItems']);
+Route::get('featured-users', [ApiController::class, 'getFeaturedUsers']);

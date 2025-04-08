@@ -66,6 +66,9 @@
                                                 <th scope="col" data-field="is_verified"
                                                     data-formatter="verifiedFormatter" data-sortable="true">
                                                     {{ __('Verified') }}</th>
+                                                <th scope="col" data-field="is_featured"
+                                                    data-formatter="featuredFormatter" data-sortable="true">
+                                                    {{ __('Featured') }}</th>
                                                 <th scope="col" data-field="status"
                                                     data-formatter="statusSwitchFormatter" data-sortable="false">
                                                     {{ __('Status') }}</th>
@@ -277,6 +280,39 @@
             }
         }
 
+        // Formatter for featured status
+        function featuredFormatter(value, row) {
+            console.log('Featured formatter for user ID:', row.id, 'Value:', value, 'Type:', typeof value, 'Row data:', row);
+            
+            // Ensure value is treated as a boolean - more comprehensive type checking
+            let isFeatured = false;
+            
+            // Check if we have featured_users in the row data (relationship data)
+            if (row.featured_users && (Array.isArray(row.featured_users) && row.featured_users.length > 0)) {
+                console.log('User has featured_users relationship data');
+                isFeatured = true;
+            }
+            // Also check the direct is_featured flag
+            else if (value === true || value === 1 || value === "true" || value === "1") {
+                console.log('User has is_featured flag set to true');
+                isFeatured = true;
+            }
+            
+            console.log('Final featured status for user ID ' + row.id + ':', isFeatured);
+            
+            if (isFeatured) {
+                return '<div class="form-check form-switch">' +
+                    '<input class="form-check-input featured-toggle" type="checkbox" ' +
+                    'data-id="' + row.id + '" checked>' +
+                    '</div>';
+            } else {
+                return '<div class="form-check form-switch">' +
+                    '<input class="form-check-input featured-toggle" type="checkbox" ' +
+                    'data-id="' + row.id + '">' +
+                    '</div>';
+            }
+        }
+
         // Formatter for subscription status
         function subscriptionFormatter(value, row) {
             if (value === 1) {
@@ -355,9 +391,14 @@
         }
 
         $(document).ready(function() {
-            // Initialize the table
-            $('#userTable').bootstrapTable();
-
+            // Initialize the table with events
+            $('#userTable').bootstrapTable({
+                onPostBody: function() {
+                    console.log('Table has been rendered, initializing event handlers');
+                    // We initialize handlers after table is rendered
+                }
+            });
+            
             // Add direct event handler for delete button clicks (in addition to the bootstrap table events)
             $(document).on('click', '.delete-user', function(e) {
                 // Only handle clicks that aren't already being handled by bootstrap table events
@@ -394,18 +435,78 @@
                 }
             });
             
-            // Add the delete button to each row's operate column after table initialization
-            $('#userTable').on('post-body.bs.table', function() {
-                console.log('Table post-body event triggered');
+            // Explicitly handle the featured-toggle change event
+            $(document).on('change', '.featured-toggle', function(e) {
+                e.stopPropagation(); // Prevent event bubbling
+                const userId = $(this).data('id');
+                const isFeatured = $(this).is(':checked') ? 1 : 0;
+                const toggleElement = $(this);
                 
-                // We no longer need to add custom delete buttons via JavaScript
-                // since they are already included by the controller
-                // This is left here for debugging purposes
+                console.log('Expert page - Toggle featured for user ID:', userId, 'to status:', isFeatured);
+                
+                // Disable the toggle during the request to prevent multiple clicks
+                toggleElement.prop('disabled', true);
+                
+                $.ajax({
+                    url: "{{ route('customer.toggle.featured') }}",
+                    type: 'POST',
+                    data: {
+                        "_token": "{{ csrf_token() }}",
+                        "user_id": userId,
+                        "is_featured": isFeatured
+                    },
+                    headers: {
+                        'X-CSRF-TOKEN': "{{ csrf_token() }}"
+                    },
+                    success: function(result) {
+                        console.log('Expert page - Featured toggle response:', result);
+                        
+                        // Re-enable the toggle
+                        toggleElement.prop('disabled', false);
+                        
+                        if (result.error === true) {
+                            // Show error message and revert toggle state
+                            alert(result.message || 'Error updating featured status');
+                            toggleElement.prop('checked', !isFeatured);
+                        } else {
+                            // Get actual status from response, don't assume it matches what we sent
+                            const actualStatus = result.is_featured || false;
+                            console.log('Expert page - Setting featured status to:', actualStatus);
+                            
+                            // Set the toggle state to the actual status from the server
+                            toggleElement.prop('checked', actualStatus);
+                            
+                            // Success - refresh table to show updated state
+                            setTimeout(function() {
+                                $('#userTable').bootstrapTable('refresh');
+                            }, 500);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Expert page - Featured toggle error:', error, xhr.responseText);
+                        
+                        // Re-enable the toggle
+                        toggleElement.prop('disabled', false);
+                        
+                        // Show detailed error message if available
+                        let errorMessage = 'An error occurred while updating the featured status';
+                        try {
+                            const response = JSON.parse(xhr.responseText);
+                            if (response && response.message) {
+                                errorMessage = response.message;
+                            }
+                        } catch (e) {
+                            console.error('Error parsing error response:', e);
+                        }
+                        
+                        alert(errorMessage);
+                        
+                        // Revert the toggle to its previous state
+                        toggleElement.prop('checked', !isFeatured);
+                    }
+                });
             });
-            
-            // We also don't need the alternative approach with timeout
-            // since the buttons are already included in the API response
-            
+
             // Handle status switch change
             $(document).on('change', '.status-switch', function() {
                 let id = $(this).data('id');

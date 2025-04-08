@@ -140,6 +140,10 @@ class User extends Authenticatable
         return $this->hasMany(UserPurchasedPackage::class);
     }
 
+    public function featured_users() {
+        return $this->hasMany(FeaturedUsers::class)->onlyActive();
+    }
+
     public function getStatusAttribute($value)
     {
         if ($this->deleted_at) {

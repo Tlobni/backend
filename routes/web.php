@@ -256,6 +256,8 @@ Route::group(['middleware' => ['auth', 'language']], static function () {
         Route::delete('/delete/{id}', [CustomersController::class, 'destroy'])->name('customer.delete');
         Route::get('/get-category-names', [CustomersController::class, 'getCategoryNames'])->name('customer.get-category-names');
         
+        // Featured users routes
+        Route::post('/toggle-featured', [CustomersController::class, 'toggleFeatured'])->name('customer.toggle.featured');
         Route::resource('customer', CustomersController::class);
     });
 
