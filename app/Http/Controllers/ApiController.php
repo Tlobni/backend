@@ -2748,6 +2748,9 @@ class ApiController extends Controller
                                      ->pluck('special_tags');
             Log::info("Special tag samples: ", $specialTagSamples->toArray());
             
+            $currentDate = date('Y-m-d');
+            $currentTime = date('H:i:s');
+            
             $sql = Item::with('user:id,name,email,mobile,profile,created_at,is_verified,show_personal_details,country_code,gender', 
                             'category:id,name,image', 
                             'gallery_images:id,image,item_id', 
@@ -2767,6 +2770,20 @@ class ApiController extends Controller
                           ->orWhereRaw("JSON_EXTRACT(special_tags, '$.is_experience') = ?", ['true'])
                           ->orWhereRaw("JSON_EXTRACT(special_tags, '$.experience') = ?", ['true'])
                           ->orWhereRaw("JSON_EXTRACT(special_tags, '$.exclusive_experience') = ?", ['true']);
+                })
+                ->where(function($query) use ($currentDate, $currentTime) {
+                    // Not expired items:
+                    // 1. expiration_date is in the future, OR
+                    // 2. expiration_date is today but expiration_time hasn't passed yet, OR
+                    // 3. expiration_date is null (no expiration)
+                    $query->where(function($q) use ($currentDate, $currentTime) {
+                            $q->where('expiration_date', '>', $currentDate)
+                              ->orWhere(function($innerQ) use ($currentDate, $currentTime) {
+                                  $innerQ->where('expiration_date', '=', $currentDate)
+                                         ->where('expiration_time', '>', $currentTime);
+                              });
+                          })
+                          ->orWhereNull('expiration_date');
                 });
                 
             // For testing, let's see items without filtering by status first
