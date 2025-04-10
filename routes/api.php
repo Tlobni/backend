@@ -82,6 +82,7 @@ Route::get('get-system-settings', [ApiController::class, 'getSystemSettings']);
 Route::get('app-payment-status', [ApiController::class, 'appPaymentStatus']);
 Route::get('get-customfields', [ApiController::class, 'getCustomFields']);
 Route::get('get-item', [ApiController::class, 'getItem']);
+Route::get('get-users', [ApiController::class, 'getUsers']);
 Route::get('get-slider', [ApiController::class, 'getSlider']);
 Route::get('get-report-reasons', [ApiController::class, 'getReportReasons']);
 Route::get('get-categories', [ApiController::class, 'getSubCategories']);

@@ -82,6 +82,7 @@ class ApiController extends Controller
             'appPaymentStatus',
             'getCustomFields', 
             'getItem',
+            'getUsers',
             'getSlider', 
             'getReportReasons',
             'getSubCategories',
@@ -690,6 +691,7 @@ class ApiController extends Controller
     }
 
     public function getItem(Request $request) {
+        Log::info('getItem request received: ' . json_encode($request->all()));
         $validator = Validator::make($request->all(), [
             'limit'             => 'nullable|integer',
             'offset'            => 'nullable|integer',
@@ -705,7 +707,6 @@ class ApiController extends Controller
             'sort_by'           => 'nullable|in:new-to-old,old-to-new,price-high-to-low,price-low-to-high,popular_items',
             'posted_since'      => 'nullable|in:all-time,today,within-1-week,within-2-week,within-1-month,within-3-month'
         ]);
-        Log::info("getItem request: " . json_encode($request->all()));
 
         if ($validator->fails()) {
             ResponseService::validationError($validator->errors()->first());
@@ -718,9 +719,25 @@ class ApiController extends Controller
                 ->when($request->id, function ($sql) use ($request) {
                     $sql->where('id', $request->id);
                 })->when(($request->category_id), function ($sql) use ($request) {
-                    $category = Category::where('id', $request->category_id)->with('children')->get();
-                    $categoryIDS = HelperService::findAllCategoryIds($category);
-                    return $sql->whereIn('category_id', $categoryIDS);
+                    if (strpos($request->category_id, ',') !== false) {
+                        // Multiple category IDs are provided as comma-separated values
+                        $categoryIds = explode(',', $request->category_id);
+                        // Get all categories with their children
+                        $allCategoryIds = [];
+                        
+                        foreach ($categoryIds as $catId) {
+                            $category = Category::where('id', $catId)->with('children')->get();
+                            $categoryIDS = HelperService::findAllCategoryIds($category);
+                            $allCategoryIds = array_merge($allCategoryIds, $categoryIDS);
+                        }
+                        
+                        return $sql->whereIn('category_id', array_unique($allCategoryIds));
+                    } else {
+                        // Single category ID
+                        $category = Category::where('id', $request->category_id)->with('children')->get();
+                        $categoryIDS = HelperService::findAllCategoryIds($category);
+                        return $sql->whereIn('category_id', $categoryIDS);
+                    }
                 })->when(($request->category_slug), function ($sql) use ($request) {
                     $category = Category::where('slug', $request->category_slug)->with('children')->get();
                     $categoryIDS = HelperService::findAllCategoryIds($category);
@@ -788,10 +805,16 @@ class ApiController extends Controller
                     return $sql->where('slug', $request->slug);
                 })->when($request->provider_item_type, function ($sql) use ($request) {
                     return $sql->where('provider_item_type', $request->provider_item_type);
+                })->when($request->rating_from || $request->rating_to, function ($sql) use ($request) {
+                    $ratingFrom = $request->rating_from ?? 0;
+                    $ratingTo = $request->rating_to ?? 5;
+                    
+                    return $sql->leftJoin('service_reviews', 'items.id', '=', 'service_reviews.service_id')
+                        ->select('items.*', DB::raw('AVG(service_reviews.ratings) as average_rating'))
+                        ->groupBy('items.id')
+                        ->havingRaw('(average_rating >= ? AND average_rating <= ?) OR average_rating IS NULL', [$ratingFrom, $ratingTo]);
                 })->when($request->special_tags, function ($sql) use ($request) {
-                    // Handle special tags filtering
                     $specialTags = $request->special_tags;
-                    Log::info("Filtering by special_tags: " . json_encode($specialTags));
                     
                     // Process each special tag
                     foreach ($specialTags as $tagKey => $tagValue) {
@@ -3411,6 +3434,105 @@ class ApiController extends Controller
         } catch (Throwable $th) {
             Log::error('Error in getFeaturedUsers: ' . $th->getMessage());
             ResponseService::logErrorResponse($th, "API Controller -> getFeaturedUsers");
+            return ResponseService::errorResponse();
+        }
+    }
+
+    public function getUsers(Request $request)
+    {
+        Log::info('getUsers request received: ' . json_encode($request->all()));
+        $validator = Validator::make($request->all(), [
+            'limit'        => 'nullable|integer',
+            'offset'       => 'nullable|integer',
+            'id'           => 'nullable',
+            'gender'       => 'nullable|in:Male,Female,Other',
+            'category'     => 'nullable|string',
+            'location'     => 'nullable|string',
+            'type'         => 'nullable|string',
+            'rating_from'  => 'nullable|numeric|min:0|max:5',
+            'rating_to'    => 'nullable|numeric|min:0|max:5',
+            'sort_by'      => 'nullable|in:name-asc,name-desc,newest,oldest'
+        ]);
+
+        if ($validator->fails()) {
+            return ResponseService::validationError($validator->errors()->first());
+        }
+
+        try {
+            $query = User::with(['roles:id,name'])
+                ->select('users.*')
+                ->when($request->id, function ($query) use ($request) {
+                    return $query->where('id', $request->id);
+                })
+                ->when($request->gender, function ($query) use ($request) {
+                    return $query->where('gender', $request->gender);
+                })
+                ->when($request->location, function ($query) use ($request) {
+                    return $query->where('location', 'LIKE', '%' . $request->location . '%');
+                })
+                ->when($request->category, function ($query) use ($request) {
+                    $categoryId = $request->category;
+                    // Check if category ID is in the comma-separated list of categories
+                    return $query->where(function($q) use ($categoryId) {
+                        // Exact match for single category
+                        $q->where('categories', $categoryId)
+                          // Or category is in comma-separated list
+                          ->orWhereRaw('FIND_IN_SET(?, categories)', [$categoryId]);
+                    });
+                })
+                ->when($request->type, function ($query) use ($request) {
+                    $userType = $request->type;
+                    return $query->where(function($subQuery) use ($userType) {
+                        // Check in type field
+                        $subQuery->where('type', 'LIKE', '%' . $userType . '%')
+                            // Check in provider_type field
+                            ->orWhere('provider_type', 'LIKE', '%' . $userType . '%')
+                            // Check by role
+                            ->orWhereHas('roles', function($roleQuery) use ($userType) {
+                                $roleQuery->where('name', 'LIKE', '%' . $userType . '%');
+                            });
+                    });
+                })
+                ->when($request->rating_from || $request->rating_to, function ($query) use ($request) {
+                    $ratingFrom = $request->rating_from ?? 0;
+                    $ratingTo = $request->rating_to ?? 5;
+                    
+                    return $query->leftJoin('user_reviews', 'users.id', '=', 'user_reviews.user_id')
+                        ->select('users.*', DB::raw('AVG(user_reviews.ratings) as average_rating'))
+                        ->groupBy('users.id')
+                        ->havingRaw('(average_rating >= ? AND average_rating <= ?) OR average_rating IS NULL', [$ratingFrom, $ratingTo]);
+                });
+
+            // Apply sorting
+            if ($request->sort_by) {
+                switch ($request->sort_by) {
+                    case 'name-asc':
+                        $query->orderBy('name', 'ASC');
+                        break;
+                    case 'name-desc':
+                        $query->orderBy('name', 'DESC');
+                        break;
+                    case 'newest':
+                        $query->orderBy('created_at', 'DESC');
+                        break;
+                    case 'oldest':
+                        $query->orderBy('created_at', 'ASC');
+                        break;
+                    default:
+                        $query->orderBy('name', 'ASC');
+                }
+            } else {
+                $query->orderBy('name', 'ASC');
+            }
+
+            // Only get active users
+            $query->where('status', 1);
+
+            $result = $query->paginate($request->limit ?? 15);
+
+            return ResponseService::successResponse('Users fetched successfully', $result);
+        } catch (Throwable $th) {
+            ResponseService::logErrorResponse($th, 'API Controller -> getUsers');
             return ResponseService::errorResponse();
         }
     }
