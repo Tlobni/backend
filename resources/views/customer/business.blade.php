@@ -184,32 +184,43 @@
         let categoryIds = value.split(',');
         let output = '';
         
-        // Check if we already have these categories in cache
-        let missingIds = categoryIds.filter(id => !window.categoryCache[id]);
-        
-        if (missingIds.length > 0) {
-            // Fetch missing category names asynchronously
-            $.ajax({
-                url: "{{ route('customer.get-category-names') }}",
-                type: 'GET',
-                async: false, // Make request synchronous for formatter to work properly
-                data: {
-                    ids: value
-                },
-                success: function(response) {
-                    if (response.success) {
-                        // Update the cache with the new category data
-                        Object.assign(window.categoryCache, response.data);
+        try {
+            // Check if we already have these categories in cache
+            let missingIds = categoryIds.filter(id => !window.categoryCache[id]);
+            
+            if (missingIds.length > 0) {
+                // Fetch missing category names synchronously
+                $.ajax({
+                    url: "{{ route('customer.get-category-names') }}",
+                    type: 'GET',
+                    async: false, // Important: Must be synchronous for formatter
+                    cache: false,
+                    data: {
+                        ids: value
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            // Update the cache with the new category data
+                            Object.assign(window.categoryCache, response.data);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error fetching category names:', error);
                     }
-                }
-            });
-        }
-        
-        // Build badges from category names using cache
-        for (let i = 0; i < categoryIds.length; i++) {
-            let id = categoryIds[i];
-            let name = window.categoryCache[id] || id;
-            output += '<span class="badge bg-light-primary me-1">' + name + '</span>';
+                });
+            }
+            
+            // Build badges from category names using cache
+            for (let i = 0; i < categoryIds.length; i++) {
+                let id = categoryIds[i];
+                if (!id || id === "") continue; // Skip empty IDs
+                
+                let name = window.categoryCache[id] || id;
+                output += '<span class="badge bg-light-primary me-1">' + name + '</span>';
+            }
+        } catch (error) {
+            console.error('Error in categoriesFormatter:', error);
+            return value; // Fallback to original value on error
         }
         
         return output;

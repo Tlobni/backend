@@ -211,8 +211,6 @@
 
         // Formatter for categories to display names instead of IDs
         function categoriesFormatter(value, row) {
-            console.log('Categories value:', value);
-
             if (!value) return '';
 
             // Cache for category data to avoid multiple requests for the same categories
@@ -221,50 +219,47 @@
             }
 
             let categoryIds = value.split(',');
-            console.log('Category IDs:', categoryIds);
             let output = '';
 
-            // Check if we already have these categories in cache
-            let missingIds = categoryIds.filter(id => !window.categoryCache[id]);
-            console.log('Missing category IDs:', missingIds);
+            try {
+                // Check if we already have these categories in cache
+                let missingIds = categoryIds.filter(id => !window.categoryCache[id]);
 
-            if (missingIds.length > 0) {
-                // Fetch missing category names asynchronously
-                console.log('Fetching category names from server...');
-                $.ajax({
-                    url: "{{ route('customer.get-category-names') }}",
-                    type: 'GET',
-                    async: false, // Make request synchronous for formatter to work properly
-                    data: {
-                        ids: value
-                    },
-                    success: function(response) {
-                        console.log('Category API response:', response);
-                        if (response.success) {
-                            // Update the cache with the new category data
-                            Object.assign(window.categoryCache, response.data);
-                            console.log('Updated category cache:', window.categoryCache);
+                if (missingIds.length > 0) {
+                    // Fetch missing category names synchronously
+                    $.ajax({
+                        url: "{{ route('customer.get-category-names') }}",
+                        type: 'GET',
+                        async: false, // Important: Must be synchronous for formatter
+                        cache: false,
+                        data: {
+                            ids: value
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                // Update the cache with the new category data
+                                Object.assign(window.categoryCache, response.data);
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error('Error fetching category names:', error);
                         }
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Error fetching category names:', error);
-                        console.log('XHR status:', status);
-                        console.log('XHR object:', xhr);
-                    }
-                });
+                    });
+                }
+
+                // Build badges from category names using cache
+                for (let i = 0; i < categoryIds.length; i++) {
+                    let id = categoryIds[i];
+                    if (!id || id === "") continue; // Skip empty IDs
+                    
+                    let name = window.categoryCache[id] || id;
+                    output += '<span class="badge bg-light-primary me-1">' + name + '</span>';
+                }
+            } catch (error) {
+                console.error('Error in categoriesFormatter:', error);
+                return value; // Fallback to original value on error
             }
 
-            console.log('Current category cache:', window.categoryCache);
-
-            // Build badges from category names using cache
-            for (let i = 0; i < categoryIds.length; i++) {
-                let id = categoryIds[i];
-                let name = window.categoryCache[id] || id;
-                console.log('Category ID:', id, 'Name:', name);
-                output += '<span class="badge bg-light-primary me-1">' + name + '</span>';
-            }
-
-            console.log('Final output:', output);
             return output;
         }
 

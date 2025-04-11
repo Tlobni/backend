@@ -725,8 +725,40 @@ class CustomersController extends Controller {
     {
         ResponseService::noPermissionThenSendJson('customer-list');
         
-        $categoryIds = explode(',', $request->ids);
+        // Handle empty request
+        if (empty($request->ids)) {
+            return response()->json([
+                'success' => true,
+                'data' => []
+            ]);
+        }
+        
+        // Clean and filter the category IDs to ensure only valid ones are used
+        $categoryIds = array_filter(
+            explode(',', $request->ids),
+            function($id) {
+                return !empty($id) && is_numeric($id);
+            }
+        );
+        
+        // Handle if no valid IDs remain after filtering
+        if (empty($categoryIds)) {
+            return response()->json([
+                'success' => true,
+                'data' => []
+            ]);
+        }
+        
+        // Get category names from the database
         $categories = Category::whereIn('id', $categoryIds)->pluck('name', 'id')->toArray();
+        
+        // Log for debugging on production
+        \Illuminate\Support\Facades\Log::info('Category names request', [
+            'requested_ids' => $request->ids,
+            'filtered_ids' => $categoryIds,
+            'found_categories' => count($categories),
+            'categories' => $categories
+        ]);
         
         return response()->json([
             'success' => true,
