@@ -1,8 +1,11 @@
 "use strict";
 
 function trans(label) {
-    // return window.languageLabels.hasOwnProperty(label) ? window.languageLabels[label] : label;
-    return window?.languageLabels[label] || label;
+    // Make sure window.languageLabels exists before trying to access it
+    if (!window.languageLabels) {
+        window.languageLabels = {};
+    }
+    return window.languageLabels[label] || label;
 }
 
 function showErrorToast(message) {

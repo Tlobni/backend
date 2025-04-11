@@ -27,6 +27,23 @@
         </div>
     </div>
 </div>
+
+<!-- Add language initialization script -->
+<script>
+    // Initialize language labels if not already defined
+    window.languageLabels = window.languageLabels || {
+        "Are you sure": "{{ __('Are you sure') }}",
+        "You wont be able to revert this": "{{ __('You wont be able to revert this') }}",
+        "Yes Delete": "{{ __('Yes Delete') }}",
+        "Cancel": "{{ __('Cancel') }}",
+        "Confirm": "{{ __('Confirm') }}",
+        "Delete": "{{ __('Delete') }}",
+        "Edit": "{{ __('Edit') }}",
+        "Yes Restore it": "{{ __('Yes Restore it') }}",
+        "Yes Delete Permanently": "{{ __('Yes Delete Permanently') }}"
+    };
+</script>
+
 @include('layouts.footer_script')
 @yield('js')
 @yield('script')
