@@ -3445,7 +3445,7 @@ class ApiController extends Controller
             'limit'        => 'nullable|integer',
             'offset'       => 'nullable|integer',
             'id'           => 'nullable',
-            'gender'       => 'nullable|in:Male,Female,Other',
+            'gender'       => 'nullable|string', // Remove strict case-sensitive validation
             'category'     => 'nullable|string',
             'location'     => 'nullable|string',
             'type'         => 'nullable|string',
@@ -3465,7 +3465,8 @@ class ApiController extends Controller
                     return $query->where('id', $request->id);
                 })
                 ->when($request->gender, function ($query) use ($request) {
-                    return $query->where('gender', $request->gender);
+                    // Convert both DB value and request value to lowercase for case-insensitive comparison
+                    return $query->whereRaw('LOWER(gender) = ?', [strtolower($request->gender)]);
                 })
                 ->when($request->location, function ($query) use ($request) {
                     return $query->where('location', 'LIKE', '%' . $request->location . '%');

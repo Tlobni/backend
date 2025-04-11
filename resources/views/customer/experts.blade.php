@@ -50,7 +50,7 @@
 
                                                 <th scope="col" data-field="mobile" data-sortable="true">
                                                     {{ __('Mobile') }}</th>
-                                                <th scope="col" data-field="gender" data-sortable="true">
+                                                <th scope="col" data-field="gender" data-formatter="genderFormatter" data-sortable="true">
                                                     {{ __('Gender') }}</th>
                                                 <th scope="col" data-field="location" data-sortable="true">
                                                     {{ __('Location') }}</th>
@@ -189,6 +189,24 @@
                 search: p.search,
                 role: 'expert'
             };
+        }
+
+        // Formatter for gender to display styled badge
+        function genderFormatter(value, row) {
+            console.log('Gender value:', value, 'Type:', typeof value);
+            
+            if (!value) return '<span class="badge bg-light-secondary">Not Specified</span>';
+            
+            // Convert to string and lowercase for case-insensitive comparison
+            let gender = String(value).toLowerCase();
+            
+            if (gender === 'male' || gender === 'm') {
+                return '<span class="badge bg-light-primary">Male</span>';
+            } else if (gender === 'female' || gender === 'f') {
+                return '<span class="badge bg-light-info">Female</span>';
+            } else {
+                return '<span class="badge bg-light-secondary">' + value + '</span>';
+            }
         }
 
         // Formatter for categories to display names instead of IDs
