@@ -17,13 +17,19 @@ class StaffController extends Controller {
 
     public function index() {
         ResponseService::noAnyPermissionThenRedirect(['staff-list', 'staff-create', 'staff-update', 'staff-delete']);
-        $roles = Role::whereIn('name', ['Super Admin', 'Staff'])->get();
+        // Get all roles, including custom roles
+        $roles = Role::where('custom_role', 1)
+                    ->orWhereIn('name', ['Super Admin', 'Staff'])
+                    ->get();
         return view('staff.index', compact('roles'));
     }
 
     public function create() {
         ResponseService::noPermissionThenRedirect('staff-create');
-        $roles = Role::whereIn('name', ['Super Admin', 'Staff'])->get();
+        // Get all roles, including custom roles
+        $roles = Role::where('custom_role', 1)
+                    ->orWhereIn('name', ['Super Admin', 'Staff'])
+                    ->get();
         return view('staff.create', compact('roles'));
     }
 
@@ -40,9 +46,9 @@ class StaffController extends Controller {
             ResponseService::validationError($validator->errors()->first());
         }
         
-        // Validate that the role is either Super Admin or Staff
-        $role = Role::find($request->role);
-        if (!$role || !in_array($role->name, ['Super Admin', 'Staff'])) {
+        // Validate that the role exists
+        $role = Role::where('name', $request->role)->first();
+        if (!$role) {
             ResponseService::validationError('Invalid role selected');
         }
         
@@ -123,10 +129,11 @@ class StaffController extends Controller {
         $sort = $request->sort ?? 'id';
         $order = $request->order ?? 'DESC';
 
-        // Query users with Super Admin or Staff roles
-        $sql = User::withTrashed()->with('roles')->orderBy($sort, $order)->whereHas('roles', function ($q) {
-            $q->whereIn('name', ['Super Admin', 'Staff']);
-        });
+        // Query users with any role except Client, Business, and Expert
+        $sql = User::withTrashed()->with('roles')->orderBy($sort, $order)
+            ->whereHas('roles', function ($q) {
+                $q->whereNotIn('name', ['Client', 'Business', 'Expert']);
+            });
 
         if (!empty($request->search)) {
             $sql->search($request->search);
