@@ -215,8 +215,10 @@
                 let id = categoryIds[i];
                 if (!id || id === "") continue; // Skip empty IDs
                 
-                let name = window.categoryCache[id] || id;
-                output += '<span class="badge bg-light-primary me-1">' + name + '</span>';
+                // Only display the category if it exists in the cache (meaning it hasn't been deleted)
+                if (window.categoryCache[id]) {
+                    output += '<span class="badge bg-light-primary me-1">' + window.categoryCache[id] + '</span>';
+                }
             }
         } catch (error) {
             console.error('Error in categoriesFormatter:', error);
