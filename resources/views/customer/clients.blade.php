@@ -275,22 +275,25 @@
                 $.ajax({
                     url: "{{ url('customer/delete') }}/" + row.id,
                     type: 'DELETE',
-                    headers: {
-                        'X-CSRF-TOKEN': "{{ csrf_token() }}"
-                    },
                     data: {
                         "_token": "{{ csrf_token() }}"
                     },
+                    headers: {
+                        'X-CSRF-TOKEN': "{{ csrf_token() }}"
+                    },
                     success: function (result) {
+                        console.log('Delete user response:', result);
                         if (result.error === false) {
                             $('#userTable').bootstrapTable('refresh');
                             alert(result.message || "{{ __('Client deleted successfully') }}");
                         } else {
+                            console.error('Error deleting user:', result.message);
                             alert(result.message || "{{ __('Failed to delete client') }}");
                         }
                     },
-                    error: function(xhr) {
-                        console.error('Delete error:', xhr);
+                    error: function(xhr, status, error) {
+                        console.error('AJAX error when deleting user:', status, error);
+                        console.log('XHR object:', xhr);
                         alert("{{ __('An error occurred while deleting the client') }}");
                     }
                 });
@@ -309,6 +312,42 @@
         const form = modal.find('form');
         form[0].reset();
     }
+    
+    // Add direct event handler for delete button clicks (in addition to the bootstrap table events)
+    $(document).on('click', '.delete-user', function(e) {
+        // Only handle clicks that aren't already being handled by bootstrap table events
+        if (!$(this).closest('tr').attr('data-uniqueid')) {
+            console.log('Direct delete button clicked');
+            const userId = $(this).data('id');
+            console.log('User ID from direct click:', userId);
+            
+            if (confirm("{{ __('Are you sure you want to delete this client?') }}")) {
+                $.ajax({
+                    url: "{{ url('customer/delete') }}/" + userId,
+                    type: 'DELETE',
+                    data: {
+                        "_token": "{{ csrf_token() }}"
+                    },
+                    headers: {
+                        'X-CSRF-TOKEN': "{{ csrf_token() }}"
+                    },
+                    success: function(result) {
+                        console.log('Direct delete response:', result);
+                        if (result.error === false) {
+                            $('#userTable').bootstrapTable('refresh');
+                            alert(result.message || "{{ __('Client deleted successfully') }}");
+                        } else {
+                            alert(result.message || "{{ __('Failed to delete client') }}");
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('AJAX error:', status, error);
+                        alert("{{ __('An error occurred while deleting the client') }}");
+                    }
+                });
+            }
+        }
+    });
     
     $(document).ready(function () {
         // Initialize the table

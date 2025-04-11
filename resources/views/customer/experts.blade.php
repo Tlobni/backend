@@ -367,29 +367,26 @@
                 if (confirm("{{ __('Are you sure you want to delete this user?') }}")) {
                     console.log('User confirmed deletion of user ID:', row.id);
                     $.ajax({
-                        url: "{{ route('customer.delete', '') }}/" + row.id,
+                        url: "{{ url('customer/delete') }}/" + row.id,
                         type: 'DELETE',
                         data: {
-                            "_token": "{{ csrf_token() }}",
-                            "role": "expert" // Adding role information to help with debugging
+                            "_token": "{{ csrf_token() }}"
                         },
                         headers: {
                             'X-CSRF-TOKEN': "{{ csrf_token() }}"
                         },
                         success: function(result) {
-                            console.log('Delete user response:', result);
+                            console.log('Direct delete response:', result);
                             if (result.error === false) {
-                                console.log('Refreshing table after successful deletion');
                                 $('#userTable').bootstrapTable('refresh');
+                                alert(result.message || "{{ __('User deleted successfully') }}");
                             } else {
-                                console.error('Error deleting user:', result.message);
-                                alert(result.message || 'Error deleting user');
+                                alert(result.message || "{{ __('Failed to delete user') }}");
                             }
                         },
                         error: function(xhr, status, error) {
-                            console.error('AJAX error when deleting user:', status, error);
-                            console.log('XHR object:', xhr);
-                            alert('Error deleting user: ' + error);
+                            console.error('AJAX error:', status, error);
+                            alert("{{ __('An error occurred while deleting the user') }}");
                         }
                     });
                 }
@@ -427,11 +424,10 @@
                     
                     if (confirm("{{ __('Are you sure you want to delete this user?') }}")) {
                         $.ajax({
-                            url: "{{ route('customer.delete', '') }}/" + userId,
+                            url: "{{ url('customer/delete') }}/" + userId,
                             type: 'DELETE',
                             data: {
-                                "_token": "{{ csrf_token() }}",
-                                "role": "expert"
+                                "_token": "{{ csrf_token() }}"
                             },
                             headers: {
                                 'X-CSRF-TOKEN': "{{ csrf_token() }}"
@@ -440,13 +436,14 @@
                                 console.log('Direct delete response:', result);
                                 if (result.error === false) {
                                     $('#userTable').bootstrapTable('refresh');
+                                    alert(result.message || "{{ __('User deleted successfully') }}");
                                 } else {
-                                    alert(result.message || 'Error deleting user');
+                                    alert(result.message || "{{ __('Failed to delete user') }}");
                                 }
                             },
                             error: function(xhr, status, error) {
                                 console.error('AJAX error:', status, error);
-                                alert('Error deleting user: ' + error);
+                                alert("{{ __('An error occurred while deleting the user') }}");
                             }
                         });
                     }

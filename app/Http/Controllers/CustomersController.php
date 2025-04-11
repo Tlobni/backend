@@ -102,9 +102,6 @@ class CustomersController extends Controller {
         // Include user_purchased_packages relationship for all roles
         $sql = $sql->with(['user_purchased_packages.package']);
 
-        // Important: Include soft deleted users so they appear in the table with inactive status
-        $sql = $sql->withTrashed();
-
         $total = $sql->count();
         $sql->skip($offset)->take($limit);
         $result = $sql->get();
@@ -247,8 +244,8 @@ class CustomersController extends Controller {
             $sql = $sql->search($request->search);
         }
 
-        // Important: Include soft deleted users so they appear in the table with inactive status
-        $sql = $sql->withTrashed();
+        // No longer include soft deleted users
+        // $sql = $sql->withTrashed();
         
         // Always include the featured_users relationship for checking featured status
         $sql = $sql->with('featured_users');
@@ -661,15 +658,15 @@ class CustomersController extends Controller {
                 'requested_by' => auth()->id() ?? 'unauthenticated'
             ]);
             
-            $user = User::withTrashed()->findOrFail($id);
-            
-            // Check if user is already deleted
-            if ($user->trashed()) {
+            // First check if user exists before attempting to find it
+            if (!User::where('id', $id)->exists()) {
                 return response()->json([
-                    'error' => true,
-                    'message' => 'User is already deleted'
-                ], 400);
+                    'error' => false,
+                    'message' => 'User already deleted or does not exist',
+                ]);
             }
+            
+            $user = User::findOrFail($id);
             
             // Get the user's role for logging
             $userRoles = $user->getRoleNames()->toArray();
@@ -678,11 +675,11 @@ class CustomersController extends Controller {
                 'roles' => $userRoles
             ]);
             
-            // Force flag to ensure deletion works
-            $result = $user->delete();
+            // Permanently delete the user from database
+            $result = $user->forceDelete();
             
             // Log the result
-            Log::info('User deletion result', [
+            Log::info('User permanent deletion result', [
                 'user_id' => $id,
                 'result' => $result ? 'success' : 'failed'
             ]);
@@ -694,6 +691,12 @@ class CustomersController extends Controller {
                 'roles' => $userRoles
             ]);
             
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            // Handle the case when user doesn't exist
+            return response()->json([
+                'error' => false,
+                'message' => 'User already deleted or does not exist',
+            ]);
         } catch (Throwable $th) {
             // Enhanced error logging
             Log::error('Error deleting user', [
