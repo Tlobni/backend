@@ -675,18 +675,18 @@ class CustomersController extends Controller {
                 'roles' => $userRoles
             ]);
             
-            // Permanently delete the user from database
-            $result = $user->forceDelete();
+            // Use the UserDeletionService to delete the user and all related data
+            $result = \App\Services\UserDeletionService::deleteUser($id);
             
             // Log the result
-            Log::info('User permanent deletion result', [
+            Log::info('User comprehensive deletion result', [
                 'user_id' => $id,
                 'result' => $result ? 'success' : 'failed'
             ]);
             
             return response()->json([
                 'error' => false,
-                'message' => 'User deleted successfully',
+                'message' => 'User and all related data deleted successfully',
                 'user_id' => $id,
                 'roles' => $userRoles
             ]);
@@ -697,21 +697,18 @@ class CustomersController extends Controller {
                 'error' => false,
                 'message' => 'User already deleted or does not exist',
             ]);
-        } catch (Throwable $th) {
-            // Enhanced error logging
+        } catch (Throwable $e) {
+            // Log the error for debugging
             Log::error('Error deleting user', [
                 'user_id' => $id,
-                'exception' => $th->getMessage(),
-                'file' => $th->getFile(),
-                'line' => $th->getLine(),
-                'trace' => $th->getTraceAsString()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
             
-            ResponseService::logErrorResponse($th, "CustomersController --> destroy");
             return response()->json([
                 'error' => true,
-                'message' => 'An error occurred while deleting the user: ' . $th->getMessage()
-            ], 500);
+                'message' => 'An error occurred while deleting the user: ' . $e->getMessage(),
+            ]);
         }
     }
 

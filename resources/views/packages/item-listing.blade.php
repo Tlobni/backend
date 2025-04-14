@@ -223,7 +223,7 @@
                                         <th scope="col" data-field="ios_product_id" data-align="center" data-sortable="true" data-visible="false">{{ __('IOS Product ID') }}</th>
                                         @can('item-listing-package-update')
                                             <th scope="col" data-field="status" data-sortable="true" data-align="center" data-formatter="statusSwitchFormatter">{{ __('Status') }}</th>
-                                            <th scope="col" data-field="operate" data-escape="false" data-align="center" data-sortable="false" data-events="packageEvents">{{ __('Action') }}</th>
+                                            <th scope="col" data-field="operate" data-escape="false" data-align="center" data-sortable="false" data-formatter="operateFormatter" data-events="packageEvents">{{ __('Action') }}</th>
                                         @endcan
                                     </tr>
                                     </thead>
@@ -406,5 +406,119 @@
         function preSuccessFunction() {
             $('#')
         }
+
+        // Package events for buttons in operate column
+        window.packageEvents = {
+            'click .edit-data': function (e, value, row, index) {
+                // Edit functionality (if already exists)
+                $('#editModal').modal('show');
+                $('.edit-form').attr('action', '/package/' + row.id);
+                $('#edit_name').val(row.name);
+                $('#edit_item_type').val(row.item_type);
+                $('#edit_ios_product_id').val(row.ios_product_id);
+                $('#edit_price').val(row.price);
+                $('#edit_discount_in_percentage').val(row.discount_in_percentage);
+                $('#edit_final_price').val(row.final_price);
+                $('#edit_description').val(row.description);
+                
+                if (row.duration == null) {
+                    $('#edit_duration_type_unlimited').prop('checked', true);
+                    $('#edit_limitation_for_duration').hide();
+                } else {
+                    $('#edit_duration_type_limited').prop('checked', true);
+                    $('#edit_limitation_for_duration').show();
+                    $('#edit_durationLimit').val(row.duration);
+                }
+                
+                if (row.item_limit == null) {
+                    $('#edit_item_limit_type_unlimited').prop('checked', true);
+                    $('#edit_limitation_for_limit').hide();
+                } else {
+                    $('#edit_item_limit_type_limited').prop('checked', true);
+                    $('#edit_limitation_for_limit').show();
+                    $('#edit_ForLimit').val(row.item_limit);
+                }
+            },
+            'click .delete-data': function (e, value, row, index) {
+                // Delete functionality
+                Swal.fire({
+                    title: "{{ __('Are you sure?') }}",
+                    text: "{{ __('You won\'t be able to revert this!') }}",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#3085d6',
+                    cancelButtonColor: '#d33',
+                    confirmButtonText: "{{ __('Yes, delete it!') }}"
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        $.ajax({
+                            url: "/package/" + row.id,
+                            type: "DELETE",
+                            data: {
+                                _token: $("meta[name='csrf-token']").attr("content")
+                            },
+                            success: function(response) {
+                                if (response.status) {
+                                    Swal.fire(
+                                        "{{ __('Deleted!') }}",
+                                        "{{ __('Package has been deleted.') }}",
+                                        'success'
+                                    );
+                                    $('#table_list').bootstrapTable('refresh');
+                                } else {
+                                    Swal.fire(
+                                        "{{ __('Error!') }}",
+                                        response.message,
+                                        'error'
+                                    );
+                                }
+                            },
+                            error: function(xhr) {
+                                Swal.fire(
+                                    "{{ __('Error!') }}",
+                                    "{{ __('Something went wrong!') }}",
+                                    'error'
+                                );
+                            }
+                        });
+                    }
+                });
+            }
+        };
+
+        // Formatter for operate column to add buttons
+        function operateFormatter(value, row, index) {
+            return [
+                '@can("item-listing-package-update")<a href="javascript:void(0)" class="btn btn-info btn-sm edit-data"><i class="bi bi-pencil-square"></i></a>@endcan',
+                '@can("item-listing-package-delete")<a href="javascript:void(0)" class="btn btn-danger btn-sm delete-data"><i class="bi bi-trash"></i></a>@endcan'
+            ].join(' ');
+        }
+
+        // Initialize table with formatter
+        $(function() {
+            $('#table_list').bootstrapTable('refreshOptions', {
+                formatters: {
+                    'operate': operateFormatter,
+                }
+            });
+
+            // Duration type toggle
+            $('.edit_duration_type').on('change', function() {
+                if ($(this).val() === 'limited') {
+                    $('#edit_limitation_for_duration').show();
+                } else {
+                    $('#edit_limitation_for_duration').hide();
+                }
+            });
+
+            // Item limit type toggle
+            $('.edit_item_limit_type').on('change', function() {
+                if ($(this).val() === 'limited') {
+                    $('#edit_limitation_for_limit').show();
+                } else {
+                    $('#edit_limitation_for_limit').hide();
+                }
+            });
+        });
     </script>
 @endsection

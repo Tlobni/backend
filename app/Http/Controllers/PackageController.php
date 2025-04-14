@@ -142,6 +142,48 @@ class PackageController extends Controller {
         }
     }
 
+    /**
+     * Remove the specified package from storage.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy($id)
+    {
+        ResponseService::noPermissionThenSendJson('item-listing-package-delete');
+        
+        try {
+            $package = Package::findOrFail($id);
+            
+            // Check if package is being used by any users
+            $userPackages = UserPurchasedPackage::where('package_id', $id)->count();
+            if ($userPackages > 0) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'This package cannot be deleted as it is currently in use by users.'
+                ]);
+            }
+            
+            // Delete package icon if exists
+            if ($package->getRawOriginal('icon')) {
+                FileService::delete($package->getRawOriginal('icon'));
+            }
+            
+            $package->delete();
+            
+            return response()->json([
+                'status' => true,
+                'message' => 'Package successfully deleted'
+            ]);
+        } catch (Throwable $th) {
+            ResponseService::logErrorResponse($th, "PackageController -> destroy");
+            return response()->json([
+                'status' => false,
+                'message' => 'An error occurred while deleting the package'
+            ]);
+        }
+    }
+
     /* Advertisement Package */
     public function advertisementIndex() {
         ResponseService::noAnyPermissionThenRedirect(['advertisement-package-list', 'advertisement-package-create', 'advertisement-package-update', 'advertisement-package-delete']);
@@ -265,18 +307,35 @@ class PackageController extends Controller {
         $sort = $request->sort ?? 'id';
         $order = $request->order ?? 'DESC';
 
-        $sql = UserPurchasedPackage::with('user:id,name', 'package:id,name');
+        // Include email in the user selection
+        $sql = UserPurchasedPackage::with(['user' => function($query) {
+            $query->select('id', 'name', 'email');
+        }, 'package' => function($query) {
+            $query->select('id', 'name');
+        }]);
+        
         if (!empty($request->search)) {
             $sql = $sql->search($request->search);
         }
+        
         $total = $sql->count();
         $sql->orderBy($sort, $order)->skip($offset)->take($limit);
         $result = $sql->get();
+        
         $bulkData = array();
         $bulkData['total'] = $total;
         $rows = array();
+        
         foreach ($result as $key => $row) {
-            $rows[] = $row->toArray();
+            // Create a flat structure for the table
+            $tempRow = $row->toArray();
+            
+            // Add dot notation fields for the bootstrap table
+            $tempRow['user.name'] = $row->user ? $row->user->name : '';
+            $tempRow['user.email'] = $row->user ? $row->user->email : '';
+            $tempRow['package.name'] = $row->package ? $row->package->name : '';
+            
+            $rows[] = $tempRow;
         }
 
         $bulkData['rows'] = $rows;

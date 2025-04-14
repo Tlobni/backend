@@ -57,8 +57,9 @@
                                     <thead class="thead-dark">
                                     <tr>
                                         <th scope="col" data-field="id" data-align="center" data-sortable="true">{{ __('ID') }}</th>
-                                        <th scope="col" data-field="user.name" data-align="center" data-sortable="false">{{ __('User Name') }}</th>
-                                        <th scope="col" data-field="package.name" data-align="center" data-sortable="false">{{ __('Package Name') }}</th>
+                                        <th scope="col" data-field="user.name" data-align="center" data-sortable="false" data-formatter="userNameFormatter">{{ __('User Name') }}</th>
+                                        <th scope="col" data-field="user.email" data-align="center" data-sortable="false" data-formatter="userEmailFormatter">{{ __('Email') }}</th>
+                                        <th scope="col" data-field="package.name" data-align="center" data-sortable="false" data-formatter="packageNameFormatter">{{ __('Package Name') }}</th>
                                         <th scope="col" data-field="start_date" data-align="center">{{ __('Start Date') }}</th>
                                         <th scope="col" data-field="end_date" data-align="center" data-formatter="unlimitedBadgeFormatter" data-sortable="true">{{ __('End Date') }}</th>
                                         <th scope="col" data-field="total_limit" data-align="center" data-formatter="unlimitedBadgeFormatter" data-sortable="true">{{ __('Total Limit') }}</th>
@@ -88,6 +89,41 @@
                 $('#table_list').bootstrapTable('refresh');
             }, 500);
         });
+        
+        // Format user information
+        function userNameFormatter(value, row) {
+            if (row.user && row.user.name) {
+                return row.user.name;
+            } else if (value) {
+                return value;
+            }
+            return '';
+        }
+        
+        function userEmailFormatter(value, row) {
+            if (row.user && row.user.email) {
+                return row.user.email;
+            } else if (value) {
+                return value;
+            }
+            return '';
+        }
+        
+        function packageNameFormatter(value, row) {
+            if (row.package && row.package.name) {
+                return row.package.name;
+            } else if (value) {
+                return value;
+            }
+            return '';
+        }
+        
+        function unlimitedBadgeFormatter(value) {
+            if (value === null || value === "unlimited") {
+                return '<span class="badge bg-info">Unlimited</span>';
+            }
+            return value;
+        }
         
         function statusFormatter(value, row) {
             if (value == 1) {
