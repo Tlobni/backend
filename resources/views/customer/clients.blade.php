@@ -35,14 +35,14 @@
                                         data-pagination-successively-size="3" data-query-params="queryParamsClient" data-table="users" data-status-column="deleted_at"
                                         data-show-export="true" data-export-options='{"fileName": "client-list","ignoreColumn": ["operate"]}' data-export-types="['pdf','json', 'xml', 'csv', 'txt', 'sql', 'doc', 'excel']"
                                         data-url="{{ route('customer.list') }}"
-                                        data-mobile-responsive="true">
+                                        data-phone-responsive="true">
                                      <thead class="thead-dark">
                                      <tr>
                                          <th scope="col" data-field="id" data-sortable="true">{{ __('ID') }}</th>
                                          <th scope="col" data-field="profile" data-formatter="imageFormatter">{{ __('Profile') }}</th>
                                          <th scope="col" data-field="name" data-sortable="true">{{ __('Full Name') }}</th>
                                          <th scope="col" data-field="email" data-sortable="true">{{ __('Email') }}</th>
-                                         <th scope="col" data-field="mobile" data-sortable="true">{{ __('Mobile') }}</th>
+                                         <th scope="col" data-field="phone" data-sortable="true">{{ __('Phone') }}</th>
                                          <th scope="col" data-field="gender" data-sortable="true">{{ __('Gender') }}</th>
                                          <th scope="col" data-field="location" data-sortable="true">{{ __('Location') }}</th>
                                          <th scope="col" data-field="is_verified" data-formatter="verifiedFormatter" data-sortable="true">{{ __('Verified') }}</th>
@@ -85,8 +85,8 @@
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label for="edit_mobile" class="form-label">{{ __('Mobile') }}</label>
-                                <input type="text" class="form-control" id="edit_mobile" name="mobile">
+                                <label for="edit_phone" class="form-label">{{ __('Phone') }}</label>
+                                <input type="text" class="form-control" id="edit_phone" name="phone">
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="edit_gender" class="form-label">{{ __('Gender') }}</label>
@@ -264,7 +264,7 @@
             $('#edit_id').val(row.id);
             $('#edit_name').val(row.name);
             $('#edit_email').val(row.email);
-            $('#edit_mobile').val(row.mobile);
+            $('#edit_phone').val(row.phone);
             $('#edit_gender').val(row.gender);
             $('#edit_location').val(row.location);
             

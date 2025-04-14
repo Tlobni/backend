@@ -33,7 +33,7 @@
                                         data-table="users" data-status-column="deleted_at" data-show-export="true"
                                         data-export-options='{"fileName": "expert-list","ignoreColumn": ["operate"]}'
                                         data-export-types="['pdf','json', 'xml', 'csv', 'txt', 'sql', 'doc', 'excel']"
-                                        data-url="{{ route('customer.list-by-role') }}" data-mobile-responsive="true">
+                                        data-url="{{ route('customer.list-by-role') }}" data-phone-responsive="true">
                                         <thead class="thead-dark">
                                             <tr>
                                                 <th scope="col" data-field="id" data-sortable="true">{{ __('ID') }}
@@ -48,8 +48,8 @@
                                                     data-formatter="categoriesFormatter" data-sortable="true">
                                                     {{ __('Categories') }}</th>
 
-                                                <th scope="col" data-field="mobile" data-sortable="true">
-                                                    {{ __('Mobile') }}</th>
+                                                <th scope="col" data-field="phone" data-sortable="true">
+                                                    {{ __('Phone') }}</th>
                                                 <th scope="col" data-field="gender" data-formatter="genderFormatter" data-sortable="true">
                                                     {{ __('Gender') }}</th>
                                                 <th scope="col" data-field="location" data-sortable="true">

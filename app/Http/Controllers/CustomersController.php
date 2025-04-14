@@ -305,7 +305,7 @@ class CustomersController extends Controller {
             if ($role === 'Expert') {
                 // Expert-specific fields
                 $tempRow['gender'] = $row->gender ?? ''; // Use gender from database
-                $tempRow['location'] = $row->address ?? '';
+                $tempRow['location'] = $row->location ?? $row->address ?? ''; // Use location first, fallback to address
                 $tempRow['categories'] = $row->categories ?? '';
                 $tempRow['expertise'] = ''; // Not in database
                 $tempRow['experience'] = ''; // Not in database
